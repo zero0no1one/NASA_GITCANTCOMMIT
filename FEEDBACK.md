@@ -1,6 +1,6 @@
 # Echo-Path: Documentation Review
 
-*Review of the 5 markdown files in this project, each checked against the code (`app.py`, `echo_path/*.py`, `tests/*.py`). Reviewer: Claude (Claude Code). Nothing in the project was changed during the review.*
+*Review of the 5 markdown files in this project, each checked against the code (`app.py`, `echo_path/*.py`, `tests/*.py`). Nothing in the project was changed during the review.*
 
 ---
 
