@@ -66,10 +66,10 @@ Python cache folders such as `__pycache__` are generated automatically and are n
 
 ## 4. Installation and startup
 
-Use Python 3.11 or newer. Open PowerShell in the project folder:
+Use Python 3.11 or newer. Open PowerShell in the repository root (the folder containing this README) and move into the app folder:
 
 ```powershell
-cd "C:\Users\Christian\Documents\NASA Space Apps\NASA Project"
+cd "NASA Project"
 python -m pip install -r requirements.txt
 python -m streamlit run app.py
 ```
@@ -93,7 +93,7 @@ On Windows, double-click `Start Echo-Path.bat`. Keep the terminal open while usi
 `Local GeoTIFF path` reads a path on the computer running Streamlit. Enter the full path, for example:
 
 ```text
-C:\Users\Christian\Downloads\lola_crop.tif
+C:\path\to\lola_crop.tif
 ```
 
 For a real DEM, choose a crop start row and column, a crop size, and the elevation unit conversion. Confirm that the file contains lunar elevation data before processing.

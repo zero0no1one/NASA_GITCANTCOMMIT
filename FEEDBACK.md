@@ -8,7 +8,7 @@
 
 The project has two sets of docs, and they disagree.
 
-- **The Codex docs** (`README.md`, `MODEL_GUIDE.md`, `PROJECT_DOCUMENTATION.md`) are good. They match the code closely and are honest about its limits; they even say "this is not A*". The limitations sections are the strongest writing in the project.
+- **The Codex docs** (the root `README.md`, plus `NASA Project/README.md` and `NASA Project/MODEL_GUIDE.md`) are good. They match the code closely and are honest about its limits; they even say "this is not A*". The limitations sections are the strongest writing in the project.
 - **The Plan and the Paper** describe a system that was never built. If a judge or reviewer reads the paper and then opens the code, the contradictions will hurt credibility.
 
 **Recommendation:** rewrite the paper to describe what the code actually does, and move the unbuilt features to *Future Work*. Don't try to build all of them before submission.
@@ -65,13 +65,15 @@ The Plan's "Why It Wins" section leans on *determinism via A\**. That argument i
 
 These are mostly fine; the fixes are small.
 
-- **Three docs overlap heavily.** The manual acceptance checklist appears in both `README.md` (12 steps) and `PROJECT_DOCUMENTATION.md` (14 steps), and the two copies already differ. For example, only the README has the "Earth elevation 90° / -5°" test. Pick one home for each fact. Suggested split:
-  - `README.md`: quick start + acceptance checklist.
-  - `MODEL_GUIDE.md`: assumptions and equations. Keep it, because the app renders it in the "Data & model guide" tab.
-  - `PROJECT_DOCUMENTATION.md`: rename it to something like `docs/ARCHITECTURE.md` and remove the parts it duplicates from the other two.
-- **Hardcoded paths:** `PROJECT_DOCUMENTATION.md` uses `C:\Users\Christian\Documents\...`, which won't work on anyone else's machine. Use relative paths.
-- **It lives outside `NASA Project/`,** and its own repository-layout tree leaves it out.
-- **Undocumented details** that matter for the paper:
+*Note: `PROJECT_DOCUMENTATION.md` has been deleted. Its content now lives in the root `README.md`, so the points below refer to that file.*
+
+- **Three docs overlap heavily.** The manual acceptance checklist appears in both `NASA Project/README.md` (12 steps) and the root `README.md` (14 steps), and the two copies already differ. For example, only `NASA Project/README.md` has the "Earth elevation 90° / -5°" test. Pick one home for each fact. Suggested split:
+  - Root `README.md`: project overview, architecture, and the single acceptance checklist (GitHub shows this file on the repo's front page).
+  - `NASA Project/README.md`: shrink it to quick-start run instructions, or merge it into the root README.
+  - `NASA Project/MODEL_GUIDE.md`: assumptions and equations. Keep it, because the app renders it in the "Data & model guide" tab.
+- **Hardcoded paths (fixed):** the root `README.md` used `C:\Users\Christian\...` paths in "Installation and startup" and the local DEM path example. They now read `cd "NASA Project"` and `C:\path\to\lola_crop.tif`.
+- **Its repository-layout tree** only describes `NASA Project/`. It leaves out the root files (`README.md` itself, `FEEDBACK.md`, `.gitignore`).
+- **Undocumented details** (missing from all three docs) that matter for the paper:
   - the hazard weights (0.65 slope / 0.35 roughness);
   - the candidate pre-score (`hazard + 0.25·distance/size`);
   - the trajectory sampling bounds (at least 121 samples, at most 15,000).
@@ -105,5 +107,5 @@ These are mostly fine; the fixes are small.
 2. Rewrite Paper §5–7 to match the code. Move A*, ODE integration, ENU conversion, Kaguya, and the interfaces to §9 Future Work.
 3. Get one real LOLA crop running and use it to fill the results table.
 4. Name the Space Apps challenge and sharpen the "why comms loss matters" argument.
-5. Consolidate the three Codex docs and fix the paths and frontmatter.
+5. Merge the duplicated content between the root `README.md` and `NASA Project/README.md`, then fix the paths and frontmatter.
 6. Optional, if time allows: implement A* behind `routing.py` so the code catches up to the original plan.
