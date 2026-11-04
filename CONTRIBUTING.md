@@ -47,8 +47,10 @@ All tests should pass. GitHub runs the same tests on every push and pull request
 
 | Path | What it is |
 |---|---|
+| `web/` | 3D lander + rover app (Vite + React + Three.js); see `web/README.md` |
+| `NASA Project/api/` | FastAPI server the 3D app calls |
 | `NASA Project/app.py` | Streamlit dashboard |
-| `NASA Project/echo_path/` | Engine modules: terrain, comms, trajectory, routing, export |
+| `NASA Project/echo_path/` | Engine modules: terrain, comms, trajectory, routing, rover, evaluation, export |
 | `NASA Project/tests/` | Engine and dashboard tests |
 | `NASA Project/MODEL_GUIDE.md` | Model assumptions, shown in the app's "Data & model guide" tab |
 | `NASA Project/NASA Space Apps 2026 - Paper.md` | Paper draft |
