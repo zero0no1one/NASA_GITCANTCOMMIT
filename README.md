@@ -1,72 +1,85 @@
-# Echo-Path Project Documentation
+# Echo-Path
 
-Echo-Path is a Streamlit research prototype for pre-flight lunar descent contingency planning. It loads a local lunar digital elevation model (DEM) or generates a synthetic test terrain, computes landing hazards, simulates a nominal descent, models terrain-related communication loss, searches for fallback landing sites, and exports reproducible mission data.
+**Live demo: https://nasa-gitcantcommit.onrender.com/** (free hosting: it can take about a minute to wake after 15 idle minutes)
 
-The prototype is intended for manual testing, classroom demonstrations, and early algorithm development. It is not flight software, an operational mission planner, or proof that a trajectory is safe for a real spacecraft.
+Echo-Path is a research prototype for lunar landing contingencies. Using real NASA LOLA terrain, it finds where a descending lander would lose its line of sight to Earth, precomputes fallback landing sites from that exact moment, and then plans a rover's drive from wherever the lander touched down, tracking comms, sunlight and battery along the way.
 
-## 1. Project goals
+It is intended for demonstrations and early algorithm development. It is not flight software, an operational mission planner, or proof that a trajectory is safe for a real spacecraft.
 
-The project addresses the planning problem created by telemetry loss during lunar descent:
+## 1. What it does
 
-1. Represent a candidate lunar landing region as an elevation grid.
-2. Identify landing hazards from slope, local roughness, missing data, and optional illumination.
-3. Simulate a nominal point-mass descent to a selected landing target.
-4. Identify terrain-blocked communication samples along that descent.
-5. Start from an outage state and search for reachable, hazard-filtered fallback landing sites.
-6. Show the results interactively and export the state, terrain, metrics, and routes.
+1. Represents a landing region as an elevation grid, using a 1.2 km crop of NASA LOLA data on the Leibnitz Beta plateau (85.45° S, 31.55° E).
+2. Finds landing hazards from slope, local roughness, missing data and, optionally, sunlight.
+3. Flies a point-mass descent to a landing target, checking fuel, thrust and terrain clearance.
+4. Finds where terrain blocks the line of sight to Earth during the descent, including terrain up to 186 km away and lunar curvature.
+5. From an outage state, searches for reachable, hazard-filtered fallback landing sites and ranks them.
+6. Plans a rover drive with A\* from the touchdown point, then reports time, speed, heading, Earth comms, sunlight and battery along the route. The rover re-plans from where it is whenever the goal or settings change.
 
-The current version uses a modular numerical core and a Streamlit interface so each model can be replaced or improved independently.
+## 2. Two ways to use it
 
-## 2. Current capabilities
+| | 3D app (`web/`) | Streamlit dashboard (`NASA Project/app.py`) |
+|---|---|---|
+| Best for | Demos: lander and rover in a 3D scene with live re-routing | Analysis: every lander setting, your own DEMs, batch coverage, ZIP export |
+| Terrain | Built-in real sites and a synthetic test map | Synthetic, or any GeoTIFF you load |
+| Sun and Earth limits | Only what each site can really see | Free sliders |
+| Horizons | Terrain out to 186 km, with lunar curvature | Inside the loaded crop only |
+| Rover | Yes | No |
 
-The working prototype provides:
-
-- Synthetic terrain with a ridge, basin, and crater-like depressions.
-- GeoTIFF DEM upload and local file path loading.
-- Native-resolution DEM crops up to 240 pixels per side in the interface.
-- Projected metre-based raster validation.
-- Nodata handling, raster scale/offset handling, and elevation unit conversion.
-- Slope and detrended roughness maps.
-- Landing eligibility filtering by slope, roughness, map boundary, and missing data.
-- Optional static Sun-direction shadow filtering.
-- Cubic nominal and contingency position guidance.
-- Lunar gravity, mass depletion, propellant, and thrust-limit checks.
-- Terrain collision and outside-known-terrain checks.
-- Static terrain raycasting for Earth or relay line-of-sight.
-- Manual outage selection at 31 sampled nominal descent states.
-- Batch fallback evaluation for blocked airborne communication samples.
-- Ranked fallback route table and 2D/3D visualization.
-- ZIP export containing inputs, maps, telemetry, routes, rankings, and coverage results.
-- Automated engine and dashboard tests.
+Both use the same Python engine.
 
 ## 3. Repository layout
 
 ```text
+README.md                  This file
+CONTRIBUTING.md            Team workflow
+DEPLOY.md                  How the live demo is deployed
+FEEDBACK.md                Documentation review and open issues
+Dockerfile                 Builds the whole site as one service
+web/                       3D app: Vite, React, TypeScript, Three.js (see web/README.md)
 NASA Project/
-├── app.py                         Streamlit user interface and orchestration
-├── echo_path/
-│   ├── __init__.py                Package marker
-│   ├── terrain.py                 Synthetic terrain, GeoTIFF loading, hazards
-│   ├── comms.py                   Terrain visibility and shadow raycasting
-│   ├── trajectory.py              Point-mass polynomial descent model
-│   ├── routing.py                 Fallback candidate search and ranking
-│   └── export.py                  ZIP export helpers
-├── tests/
-│   ├── test_engines.py            Numerical and data-ingestion tests
-│   └── test_dashboard.py          Streamlit interaction tests
-├── requirements.txt               Python dependencies
-├── Start Echo-Path.bat            Windows launcher
-├── MODEL_GUIDE.md                 Detailed assumptions and equations
-├── README.md                      Quick start and acceptance checklist
+├── echo_path/             The engine
+│   ├── terrain.py         Synthetic terrain, GeoTIFF loading, hazards, surrounding terrain layers
+│   ├── comms.py           Line of sight and shadow raycasting
+│   ├── astro.py           Where the Sun and Earth can appear from a site
+│   ├── trajectory.py      Point-mass polynomial descent model
+│   ├── routing.py         Fallback candidate search and ranking
+│   ├── rover.py           A* route, smoothing, timed drive with comms, sunlight and battery
+│   ├── evaluation.py      Results table for the paper
+│   └── export.py          ZIP export helpers
+├── api/                   FastAPI server used by the 3D app
+├── data/                  Real terrain files (see data/README.md for sources)
+├── tests/                 Automated tests
+├── app.py                 Streamlit dashboard
+├── requirements.txt       Python dependencies for the dashboard and engine
+├── Start Echo-Path.bat    Windows launcher for the dashboard
+├── MODEL_GUIDE.md         Dashboard assumptions and equations
+├── README.md              Dashboard quick start and acceptance checklist
 ├── NASA Space Apps Challenge 2026 - Plan.md
-└── NASA Space Apps 2026 - Paper.md
+├── NASA Space Apps 2026 - Paper.md
+└── NASA Space Apps 2026 - Paper corrections (draft).md
 ```
 
-Python cache folders such as `__pycache__` are generated automatically and are not part of the application design.
+## 4. Running it
 
-## 4. Installation and startup
+Use Python 3.11 or newer, and Node 20 or newer for the 3D app. Commands start from the repository root.
 
-Use Python 3.11 or newer. Open PowerShell in the repository root (the folder containing this README) and move into the app folder:
+**3D app** (two terminals):
+
+```powershell
+cd "NASA Project"
+python -m pip install -r api/requirements.txt
+python -m uvicorn api.main:app --reload --port 8000
+```
+
+```powershell
+cd web
+npm install
+npm run dev
+```
+
+Then open http://localhost:5173. See `web/README.md` for what's on screen and `DEPLOY.md` for the production build.
+
+**Streamlit dashboard:**
 
 ```powershell
 cd "NASA Project"
@@ -74,279 +87,171 @@ python -m pip install -r requirements.txt
 python -m streamlit run app.py
 ```
 
-Open the address printed by Streamlit, normally:
+Then open the address it prints, normally http://127.0.0.1:8501. On Windows you can also double-click `Start Echo-Path.bat`. Keep the terminal open while using it; `Ctrl+C` stops it.
 
-```text
-http://127.0.0.1:8501
-```
-
-On Windows, double-click `Start Echo-Path.bat`. Keep the terminal open while using the application; closing it stops the local server. Press `Ctrl+C` in that terminal to stop it.
-
-## 5. Interface workflow
-
-### 5.1 Choose terrain
-
-`Synthetic demo` is the default and requires no external data. It creates a 101 × 101 grid with 10 m spacing, a ridge crossing the region, a basin, and crater-like depressions.
-
-`Upload GeoTIFF` accepts a `.tif` or `.tiff` through the browser.
-
-`Local GeoTIFF path` reads a path on the computer running Streamlit. Enter the full path, for example:
-
-```text
-C:\path\to\lola_crop.tif
-```
-
-For a real DEM, choose a crop start row and column, a crop size, and the elevation unit conversion. Confirm that the file contains lunar elevation data before processing.
-
-### 5.2 Set landing limits
-
-- Maximum slope controls the allowable local terrain angle.
-- Maximum detrended roughness controls allowable local height variation.
-- Landing neighbourhood controls the approximate lander footprint used for eligibility erosion.
-- Require sunlit landing sites enables a static Sun raycast.
-- Sun azimuth is measured clockwise from local grid north.
-- Sun elevation at or below the local horizon produces no sunlit landing sites in the model.
-
-### 5.3 Set descent and vehicle values
-
-The interface accepts:
-
-- Start and target positions as percentages of the selected tile.
-- Initial altitude above the local terrain.
-- Nominal descent duration.
-- Initial X, Y, and vertical velocity.
-- Dry mass and initial propellant mass.
-- Maximum thrust.
-- Specific impulse.
-
-The default values are demonstration values, not a real lander configuration.
-
-### 5.4 Set communication geometry
-
-Communication is represented by a fixed ray direction:
-
-- Earth/relay azimuth is clockwise from local grid north.
-- Earth/relay elevation is the ray angle above the local horizontal.
-- Elevation at or below zero is treated as blocked.
-- Rays are evaluated only inside the selected DEM crop.
-
-The app labels terrain outside the crop as unknown rather than assuming it is clear.
-
-### 5.5 Inspect results
-
-The summary reports:
-
-- Landing-eligible area.
-- Number of blocked communication samples out of 31.
-- Nominal propellant required.
-- Peak required thrust.
-
-The selected outage slider allows a user to inject an outage at any sampled state, including a normally clear state. The displayed fallback options start at the selected state’s exact position, velocity, and remaining mass.
-
-The tabs provide:
-
-- `Mission map`: elevation, hazard, slope, or roughness with nominal and fallback overlays.
-- `3D descent`: terrain surface and route traces in three dimensions.
-- `Flight telemetry`: nominal clearance, thrust, mass, velocity, and sampled state table.
-- `Outage coverage & export`: batch analysis and downloadable ZIP output.
-- `Data & model guide`: input contract, equations, assumptions, and limitations.
-
-## 6. DEM data contract
-
-The importer expects a north-up, unrotated, projected lunar GeoTIFF with horizontal coordinates in metres. Geographic degree grids are rejected because the local gradient and distance calculations require metric spacing.
-
-Before importing LOLA data, record:
-
-- The source product and landing-region coordinates.
-- Projection and lunar radius or datum assumptions.
-- Horizontal units and pixel spacing.
-- Vertical units.
-- Band scale and offset.
-- Nodata value.
-- The original PDS label if the source is a raw IMG/LBL product.
-- The processing or reprojection steps used to create the GeoTIFF.
-
-Raw PDS IMG files are not accepted directly by the interface. Convert them to a north-up projected GeoTIFF while preserving the label metadata. Do not select `Kilometres` unless the elevation values supplied to the importer are in kilometres after raster scale and offset are applied.
-
-The importer rejects:
-
-- Geographic latitude/longitude rasters.
-- Rotated rasters.
-- Invalid crop origins.
-- Crops with fewer than 10 rows or columns.
-- Crops with no valid elevation values.
-- Regions larger than 10 km in either local dimension.
-
-The user must verify that the DEM is lunar data; the checkbox is an intentional human confirmation and does not validate the file scientifically.
-
-## 7. Computational architecture
-
-### 7.1 `terrain.py`
-
-`Terrain` stores the elevation array, horizontal spacing, source name, and metadata. Coordinates are local X/easting and Y/northing in metres. Internally, row zero is the southern edge after imported rasters are flipped from their usual north-first storage order.
-
-`synthetic()` generates the reproducible default terrain from a seed.
-
-`load_dem()` reads a raster crop with Rasterio, applies band scale and offset, applies the selected vertical unit conversion, preserves nodata as `NaN`, validates projection and orientation, and stores source metadata.
-
-`hazards()` computes:
-
-```text
-slope = atan(sqrt((dz/dx)^2 + (dz/dy)^2))
-```
-
-in degrees, then computes local detrended roughness. A cell is eligible only when its entire landing neighbourhood is known and remains below the slope and roughness thresholds. Map boundaries and missing cells are excluded by erosion.
-
-### 7.2 `comms.py`
-
-`visibility()` samples a ray from each state toward the configured azimuth and elevation. A known terrain value above the ray blocks communication. Missing cells produce unknown coverage unless a known obstacle blocks first. A below-horizon ray is blocked.
-
-`shadow_map()` applies the same ray concept to every terrain cell for optional illumination filtering.
-
-This is a static local geometric model. It does not calculate lunar curvature, orbital ephemerides, relay positions, radio link budget, antenna pointing, or time-varying lighting.
-
-### 7.3 `trajectory.py`
-
-`Vehicle` stores:
-
-```text
-dry_mass, fuel, max_thrust, isp, gravity=1.62 m/s², g0=9.80665 m/s²
-```
-
-`trajectory()` uses a cubic position polynomial with initial position and velocity and a stationary touchdown endpoint. It analytically derives velocity and acceleration and samples the result at no more than 0.5 seconds per step, with an additional cell-scale sampling bound.
-
-Required acceleration includes lunar gravity. The model estimates propellant from integrated required acceleration:
-
-```text
-m(t) = m(0) exp(-integral(required_acceleration dt) / (Isp * g0))
-```
-
-The route is rejected if it:
-
-- Leaves known terrain.
-- Intersects terrain.
-- Drops below dry mass.
-- Exceeds maximum thrust.
-- Requires downward thrust under the current sign convention.
-
-This is an analytical commanded-trajectory evaluator. It does not simulate a saturated throttle controller, attitude dynamics, engine lag, throttle quantization, structural loads, or navigation uncertainty.
-
-### 7.4 `routing.py`
-
-`plan_fallbacks()` receives the selected nominal state, not only a map coordinate. It uses the exact position, velocity, remaining mass, and time available after the outage.
-
-It selects up to 16 spatially separated eligible landing cells, evaluates three duration factors—0.8, 1.0, and 1.25 times the remaining nominal time—and keeps feasible routes. A candidate score is:
-
-```text
-score = landing_hazard + 0.4 * fuel_used / available_mass
-```
-
-The nearest eligible site is always evaluated so late outages can still be checked. The planner is a bounded heuristic search, not an A* implementation, a global optimizer, or a proof of reachability.
-
-### 7.5 `export.py`
-
-`export_bundle()` creates a ZIP containing:
-
-- `mission.json`: mission parameters and terrain metadata.
-- `elevation_m.csv`: selected elevation crop.
-- `hazard.csv`, `slope.csv`, `roughness.csv`, `safe.csv`: analysis layers.
-- `nominal.csv`: nominal position, velocity, mass, thrust, and clearance samples.
-- `coverage.json`: batch outage coverage and rejection counts.
-- `outage_<index>/ranking.json`: ranked candidates per outage state.
-- `outage_<index>/route_<rank>.csv`: fallback telemetry for each accepted route.
-- `README.txt`: coordinate, time, and interpretation notes.
-
-Each route’s time starts at zero. The outage time is recorded in the mission configuration and coverage table.
-
-## 8. Automated tests
-
-Run the full suite with:
+**Command-line tools** (from `NASA Project/`):
 
 ```powershell
+python -m echo_path.evaluation --dem data/lola_site20_r1560_c1320.tif --surround data/lola_site20_surround_40m.tif --surround data/lola_south_pole_surround_640m.tif
+python -m echo_path.rover --dem data/lola_site20_r1560_c1320.tif --surround data/lola_site20_surround_40m.tif --surround data/lola_south_pole_surround_640m.tif --goal 180 1020
+```
+
+## 5. Results at the default site
+
+With Earth at its mean position (3.6° elevation), comms are clear until 100 s of the 120 s descent. Full method, sources and accuracy checks are in `NASA Project/data/README.md`.
+
+| Metric | Nominal Flight | Unmitigated Outage | Echo-Path Fallback |
+|---|---:|---:|---:|
+| Landing hazard score (H) | 0.40 | 1.00 | 0.02 |
+| Fuel margin remaining (%) | 79.0 | 79.0 | 75.7 |
+| Touchdown slope (deg) | 6.8 | 12.1 | 0.0 |
+
+"Unmitigated" is a constructed scenario: the target is moved to the nearest cell that fails the surface limits but can still be flown to, standing in for a target the ground would have redirected away from. These numbers describe one scenario with illustrative vehicle values, not a statistical result.
+
+Fallback coverage drops as touchdown nears: 11 feasible options at 100 s, then 1–2 at each later dropout.
+
+A rover drive across the map to a goal in the north-west is 836 m in about 39 minutes over 5 legs, with Earth blocked 44% of the time and shadow 24%. That is about 2 minutes quicker than a straight line, because the route avoids steeper ground.
+
+## 6. Models
+
+### Terrain and hazards (`terrain.py`)
+
+`Terrain` stores the elevation array, horizontal spacing, source and metadata. Coordinates are local X/easting and Y/northing in metres, and row zero is the southern edge.
+
+```text
+slope  = atan(sqrt((dz/dx)^2 + (dz/dy)^2))          central differences
+rough  = RMS departure from a plane fitted over the landing neighbourhood
+hazard = clip(0.65*slope/slope_limit + 0.35*rough/roughness_limit, 0, 1)
+```
+
+A cell is eligible only when its entire landing neighbourhood is known and within both limits. Map edges and missing cells are excluded, and ineligible cells get a hazard of 1. Sunlight, where required, is a pass/fail filter rather than a weighted term.
+
+### Line of sight (`comms.py`)
+
+`visibility()` marches a ray from each point toward an azimuth and elevation, and terrain above the ray blocks it. Within the crop it uses a local flat surface, at half-cell steps. If the terrain has surroundings, the ray continues across the coarser layers, using each one only outside finer data and lowering distant ground by d²/2R for lunar curvature. An elevation at or below 0° counts as blocked.
+
+`shadow_map()` applies the same idea to every cell. The rover uses a coarser version to steer its route; the sunlight it reports is ray-cast at each point along the drive.
+
+### Sun and Earth limits (`astro.py`)
+
+A simple Moon-fixed geometry using published extremes: libration of about ±6.7° in latitude and ±7.9° in longitude, a solar latitude within ±1.54°, and Earth's small parallax. It gives each site's possible range. It is not a time-resolved ephemeris.
+
+### Descent (`trajectory.py`)
+
+`Vehicle` stores dry mass, fuel, maximum thrust, specific impulse, lunar gravity (1.62 m/s²) and g0 (9.80665 m/s²).
+
+`trajectory()` uses a cubic position polynomial from the initial position and velocity to a stationary touchdown, derives velocity and acceleration analytically, and samples at most 0.5 s and half a cell apart (at least 121 samples, at most 15,000).
+
+```text
+m(t) = m(0) exp(-integral(|a - g| dt) / (Isp * g0))
+```
+
+A route is rejected if it leaves known terrain, hits terrain, drops below dry mass, exceeds maximum thrust or needs downward thrust. This evaluates a commanded trajectory; it does not simulate a controller.
+
+### Fallback search (`routing.py`)
+
+`plan_fallbacks()` starts from the outage state's exact position, velocity, remaining mass and remaining time. It pre-scores eligible cells by `hazard + 0.25*distance/map_size`, picks up to 16 at least 4 cells apart (always including the nearest), tries three durations (0.8, 1.0 and 1.25 times the remaining time, at least 4 s), and ranks feasible routes by:
+
+```text
+score = hazard + 0.4 * fuel_used / available_propellant
+```
+
+This is a bounded heuristic search, not a global optimizer or a proof of reachability. "No result" means none of these candidates passed.
+
+### Rover (`rover.py`)
+
+Each cell costs:
+
+```text
+cost = 1 + 2*slope/max_slope + rough/max_roughness + shadow_penalty*shadowed
+```
+
+Cells over the slope or roughness limit (or with missing data) are blocked. `astar()` is an 8-connected A\* with straight-line distance as its heuristic. `smooth()` then removes grid zig-zags, taking a straight shortcut only where it costs no more than the route it replaces.
+
+`drive()` walks the route with speed `speed*max(0.3, 1 - slope/max_slope)`, and integrates the battery step by step, with charge above full lost. The rover stops if the battery empties. The default speed and power values are illustrative.
+
+### API (`api/main.py`)
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/terrains` | Available terrains and each one's sky limits |
+| `GET /api/terrain/{id}` | Elevation, hazard and slope grids (cached) |
+| `POST /api/mission` | Descent, comms samples and ranked fallbacks |
+| `POST /api/rover` | Rover route, timeline and summary |
+| `GET /api/health` | Health check |
+
+If the web app has been built, the API also serves it, so one process is the whole site.
+
+## 7. Streamlit dashboard workflow
+
+**Terrain.** `Synthetic demo` is the default and needs no data: a 101 × 101 grid at 10 m spacing with a ridge, a basin and crater-like depressions. `Upload GeoTIFF` takes a `.tif` or `.tiff`. `Local GeoTIFF path` reads a path on the computer running Streamlit, for example `C:\path\to\lola_crop.tif`. For a real DEM, choose a crop start, crop size and vertical units, and confirm the data is lunar.
+
+**Limits.** Maximum slope and detrended roughness, landing neighbourhood size, and an optional sunlit requirement with Sun azimuth (clockwise from grid north) and elevation.
+
+**Descent and vehicle.** Start and target as percentages of the tile, initial height, descent time, initial velocity, dry mass, propellant, maximum thrust and specific impulse. The defaults are demonstration values, not a real lander.
+
+**Communication.** A fixed direction: azimuth clockwise from grid north and elevation above local horizontal. Rays are checked only inside the crop, and the app says so: "clear" means nothing blocks it within the tile.
+
+**Results.** The outage slider can inject an outage at any of the 31 sampled states, and fallbacks start from that state's exact position, velocity and mass. The tabs are `Mission map`, `3D descent`, `Flight telemetry`, `Outage coverage & export` and `Data & model guide`.
+
+The ZIP export holds `mission.json`, the terrain and hazard layers as CSV, `nominal.csv`, `coverage.json`, ranked routes per outage and a `README.txt`. Each route's time starts at zero.
+
+## 8. DEM data contract
+
+The importer expects a north-up, unrotated, projected lunar GeoTIFF with horizontal coordinates in metres. It rejects geographic latitude/longitude rasters, rotated rasters, invalid crop origins, crops under 10 rows or columns, crops with no valid elevations and regions over 10 km across.
+
+Raw PDS IMG files must first be converted to a projected GeoTIFF. For every real-data run, record the source product and URL, projection, pixel spacing, vertical units, scale and offset, nodata value, crop window and any processing steps. `NASA Project/data/README.md` does this for the bundled data, and `data/make_lola_crop.py` regenerates it.
+
+The lunar-data checkbox is a human confirmation; it does not validate the file.
+
+## 9. Tests
+
+From `NASA Project/`:
+
+```powershell
+python -m pip install -r api/requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-The tests cover:
+The 69 tests cover hazards, line of sight, far terrain and curvature, Sun and Earth geometry, descent physics, fallback search, A\* and smoothing, battery behaviour, GeoTIFF loading, the bundled data, the evaluation, the API and the Streamlit dashboard.
 
-- Planar slope and detrended roughness.
-- Missing-data exclusion.
-- Ridge-based line-of-sight blockage.
-- Unknown communication through missing terrain.
-- Analytic hover mass depletion.
-- Fuel and thrust rejection.
-- Terrain collision and outside-tile rejection.
-- Synthetic end-to-end fallback generation.
-- GeoTIFF projection, orientation, scale, offset, nodata, and metadata.
-- Geographic DEM rejection.
-- Oversized landing-footprint exclusion.
-- ZIP integrity and exported state continuity.
-- Streamlit default rendering.
-- Batch coverage generation.
-- Coverage reset after parameter changes.
-- Illumination controls.
-- Invalid DEM path handling.
+Every push and pull request to `main` also runs lint and a build of the 3D app, then builds the deployable container and tests it under a 512 MB memory limit.
 
-Warnings from Rasterio about future affine-matrix syntax do not indicate a test failure.
+**Manual checks.** For the dashboard, follow the checklist in `NASA Project/README.md`. For the 3D app:
 
-## 9. Manual acceptance test
-
-1. Start the app in Synthetic demo mode.
-2. Confirm the dashboard shows a ridge, a nominal route, blocked communication markers, and ranked fallbacks.
-3. Switch through all four map layers and verify that route overlays remain aligned.
-4. Open the 3D descent tab and rotate the plot.
-5. Move the outage slider and confirm the fallback ranking changes.
-6. Move it to touchdown and confirm that no new descent route is offered.
-7. Inspect clearance, thrust, velocity, and mass in Flight telemetry.
-8. Run batch outage precomputation and inspect option counts and rejection reasons.
-9. Download the ZIP and verify the CSV and JSON files.
-10. Set propellant to 1 kg and confirm an insufficient-fuel rejection.
-11. Set maximum thrust to 100 N and confirm a thrust-limit rejection.
-12. Enable Sun constraints and set Sun elevation to -5 degrees; eligible area should become zero.
-13. Enter an invalid local DEM path and confirm a readable load error.
-14. Import a valid projected lunar GeoTIFF crop when available.
+1. The default run shows the lander losing comms at 100 s and diverting to fallback #1.
+2. After touchdown, the rover drives to the goal with a live HUD.
+3. Clicking the terrain mid-drive makes the rover pause briefly, then turn toward the new goal, leaving a dashed trail.
+4. Scrubbing back past that re-route shows the rover on its old route.
+5. Moving the Earth slider does not restart the run.
+6. The near-pole terrain shows Earth below the horizon and all samples blocked.
 
 ## 10. Known limitations
 
-The current prototype does not model:
+- Sun and Earth are fixed during a run; there is no time-resolved ephemeris, and no relay satellites.
+- No radio link budget, antenna pointing or handover. Comms means geometric line of sight only.
+- Earth at or below 0° counts as blocked, even for a lander high enough to see slightly past the local horizon.
+- At 5 m/pixel, boulders and small craters are not resolved, and DEM uncertainty is not modelled.
+- The lander is a point mass following a polynomial: no attitude, throttle saturation, engine lag, minimum thrust, navigation error or touchdown dynamics. The default descent is a short terminal phase (350 m, 120 s).
+- Lander fallbacks come from a bounded candidate search rather than a global optimizer. A\* is used for the rover only.
+- Rover power does not depend on slope, solar input does not depend on Sun angle, and there's no thermal model.
+- Route checks are sampled, not a continuous collision proof.
+- Vehicle and rover values are illustrative, not a real spacecraft.
 
-- Lunar curvature or a full selenographic coordinate frame.
-- A real Earth, relay, Sun, or lander ephemeris.
-- Radio link budgets, antenna attitude, or relay handover.
-- DEM uncertainty or vertical datum uncertainty.
-- Boulders and hazards smaller than the DEM resolution.
-- A full 3-DOF or 6-DOF rigid-body simulation.
-- Throttle saturation and attitude control.
-- Engine ignition delay or minimum thrust.
-- Fuel reserves, landing gear geometry, or touchdown dynamics.
-- A* or RRT graph routing.
-- A formal continuous-time collision proof.
-- Onboard execution or flight certification.
+These limits must be resolved or explicitly bounded before using outputs for any real mission decision.
 
-These limitations are deliberate scope boundaries for the first demonstrable prototype. They must be resolved or explicitly bounded before using outputs for any real mission design decision.
+## 11. Possible next steps
 
-## 11. Recommended next upgrades
+1. Time-resolved Earth and Sun positions from an ephemeris, and relay satellites.
+2. Uncertainty margins on slope, roughness, clearance and line of sight.
+3. Constrained powered-descent guidance in place of the cubic evaluator, with attitude and throttle limits.
+4. Evaluation across many sites and scenarios rather than one.
+5. Rover power that depends on slope and Sun angle.
 
-1. Add a proper lunar coordinate adapter and a documented DEM reprojection pipeline.
-2. Add a PDS IMG/LBL conversion utility with provenance logging.
-3. Replace static communication geometry with time-tagged Earth and relay ephemerides.
-4. Add uncertainty margins to slope, roughness, clearance, and communication rays.
-5. Implement a grid-based A* planner with turn, acceleration, and fuel costs.
-6. Replace the cubic feasibility evaluator with a constrained dynamics solver.
-7. Add lander attitude, thrust-vector, throttle, and minimum-thrust constraints.
-8. Add scenario comparison against a nominal-only landing plan.
-9. Store mission inputs and exported results in a versioned run manifest.
-10. Validate against an agreed LOLA landing-region dataset and published reference cases.
+## 12. References
 
-## 12. Data provenance and reproducibility
-
-For every real-data run, save the downloaded source name, source URL or archive identifier, PDS label, projection method, crop window, scale/offset, vertical units, nodata value, app version, parameter values, and exported ZIP. Synthetic terrain is reproducible from its seed.
-
-The export bundle is the intended handoff artifact for a run. It preserves the numerical layers and telemetry needed to reproduce plots and inspect the selected state without relying on the live Streamlit session.
-
-## 13. References
-
+- Barker, M. K. et al. (2023). A New View of the Lunar South Pole from LOLA. *Planetary Science Journal* 4, 183. [Data](https://pgda.gsfc.nasa.gov/products/90)
+- Barker, M. K., Mazarico, E., Neumann, G. A. et al. (2021). Improved LOLA elevation maps for south pole landing sites. *Planetary and Space Science* 203, 105119. [Data](https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/)
 - [NASA Glenn Research Center: Specific impulse](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/specific-impulse/)
 - [NASA Glenn Research Center: Ideal rocket equation](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/ideal-rocket-equation/)
 - [Rasterio dataset API](https://rasterio.readthedocs.io/en/stable/api/rasterio.io.html)
-- `NASA Space Apps Challenge 2026 - Plan.md` in this project
-- `NASA Space Apps 2026 - Paper.md` in this project
