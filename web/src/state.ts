@@ -6,8 +6,8 @@ export type Layer = 'elevation' | 'hazard' | 'slope'
 interface SimState {
   terrains: TerrainInfo[]
   terrainId: string
-  earthEl: number
-  earthAz: number | null      // null = terrain default (grid north for the LOLA crop)
+  earthEl: number | null      // null = this terrain's default sky (also the Sun and Earth azimuth below)
+  earthAz: number | null
   outageStep: number | null   // null = first blocked comms sample
   mission: Mission | null
   missionError: string | null
@@ -21,8 +21,8 @@ interface SimState {
   goal: [number, number] | null
   roverSpeed: number
   maxSlope: number
-  sunAz: number
-  sunEl: number
+  sunAz: number | null
+  sunEl: number | null
 
   plan: RoverPlan | null
   planStart: number           // simulation time at which the current rover plan begins
@@ -40,8 +40,8 @@ interface SimState {
 
 export const useSim = create<SimState>((set) => ({
   terrains: [],
-  terrainId: 'lola_site04',
-  earthEl: 3,
+  terrainId: 'lola_site20',
+  earthEl: null,
   earthAz: null,
   outageStep: null,
   mission: null,
@@ -56,8 +56,8 @@ export const useSim = create<SimState>((set) => ({
   goal: null,
   roverSpeed: 0.5,
   maxSlope: 20,
-  sunAz: 90,
-  sunEl: 5,
+  sunAz: null,
+  sunEl: null,
 
   plan: null,
   planStart: 0,

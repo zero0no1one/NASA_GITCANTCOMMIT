@@ -43,7 +43,7 @@ export function Timeline({ end, landingEnd }: { end: number; landingEnd: number 
           {playing && simTime < end ? 'Pause' : 'Play'}
         </button>
         <button onClick={restartRun}>Restart</button>
-        <input type="range" min={0} max={Math.max(end, 1)} step={0.5} value={simTime}
+        <input type="range" min={0} max={Math.max(end, 1)} step="any" value={simTime}
           onChange={(e) => set({ simTime: Number(e.target.value) })} aria-label="Simulation time" />
         <span className="clock">T+{formatClock(simTime)} / {formatClock(end)}</span>
         <select value={rate} onChange={(e) => set({ rate: Number(e.target.value) })} aria-label="Playback speed">

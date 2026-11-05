@@ -6,7 +6,8 @@ Defaults match the dashboard sidebar so numbers agree with the app.
 import argparse
 import json
 import numpy as np
-from .terrain import synthetic, load_dem, hazards
+from .terrain import synthetic, load_dem, load_surround, hazards
+from .astro import site_of, sky_limits
 from .comms import visibility
 from .trajectory import Vehicle, trajectory
 from .routing import plan_fallbacks
@@ -180,14 +181,23 @@ def main(argv=None):
     parser.add_argument('--row', type=int, default=0, help='DEM crop start row (from north)')
     parser.add_argument('--col', type=int, default=0, help='DEM crop start column (from west)')
     parser.add_argument('--size', type=int, default=240, help='DEM crop size in pixels')
-    parser.add_argument('--earth-az', type=float, default=DEFAULTS['earth_az'])
-    parser.add_argument('--earth-el', type=float, default=DEFAULTS['earth_el'])
+    parser.add_argument('--surround', action='append', default=[], metavar='PATH',
+                        help='Coarser DEM for distant horizons, finest first; repeatable. Earth then defaults to its mean position at the site')
+    parser.add_argument('--earth-az', type=float)
+    parser.add_argument('--earth-el', type=float)
     parser.add_argument('--reference-slope', help='Published slope GeoTIFF on the same grid as --dem')
     parser.add_argument('--json', help='Also write the full results to this JSON file')
     args = parser.parse_args(argv)
     terrain = load_dem(args.dem, args.row, args.col, args.size) if args.dem else synthetic()
+    terrain.surroundings = [load_surround(path, terrain) for path in args.surround]
     reference = load_dem(args.reference_slope, args.row, args.col, args.size) if args.reference_slope else None
-    result = evaluate(terrain, reference_slope=reference, earth_az=args.earth_az, earth_el=args.earth_el)
+    earth_az, earth_el = DEFAULTS['earth_az'], DEFAULTS['earth_el']
+    if terrain.surroundings:
+        earth = sky_limits(*site_of(terrain))['earth']
+        earth_az, earth_el = earth['mean_az'] % 360, earth['mean_el']
+    result = evaluate(terrain, reference_slope=reference,
+                      earth_az=earth_az if args.earth_az is None else args.earth_az,
+                      earth_el=earth_el if args.earth_el is None else args.earth_el)
     print(format_markdown(result))
     if args.json:
         with open(args.json, 'w', encoding='utf-8') as fh:

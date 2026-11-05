@@ -102,7 +102,7 @@ export function Rover({ grid, timeline, exaggeration }: Props) {
 
   return (
     <group>
-      <Line points={route.points} vertexColors={route.colors} lineWidth={3} />
+      {route.points.length > 1 && <Line points={route.points} vertexColors={route.colors} lineWidth={3} />}
       {trailPoints.length > 1 && <Line points={trailPoints} color="#cbd5e1" lineWidth={2.5} dashed dashSize={6} gapSize={4} />}
       <group ref={body}>
         <RoverModel />

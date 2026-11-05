@@ -8,11 +8,14 @@ export function Controls({ mission }: { mission: Mission | null }) {
   const grid = mission?.terrain
   const width = grid ? (grid.cols - 1) * grid.dx : 1000
   const height = grid ? (grid.rows - 1) * grid.dy : 1000
+  const sky = grid?.sky
+  const earthEl = s.earthEl ?? mission?.earth.elevation_deg ?? 0
+  const sunEl = s.sunEl ?? sky?.sun_el ?? 0
 
   return (
     <aside className="controls">
       <Section title="Terrain">
-        <select value={s.terrainId} onChange={(e) => set({ terrainId: e.target.value, earthAz: null, outageStep: null })}>
+        <select value={s.terrainId} onChange={(e) => set({ terrainId: e.target.value, earthAz: null, earthEl: null, sunAz: null, sunEl: null, outageStep: null })}>
           {s.terrains.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
         </select>
         <div className="seg">
@@ -50,8 +53,16 @@ export function Controls({ mission }: { mission: Mission | null }) {
             {mission.fallbacks.length === 0 && <p className="note bad">No feasible fallback from this outage.</p>}
           </>
         )}
-        <Slider label="Earth elevation" value={s.earthEl} min={-2} max={20} step={0.5} unit="°"
+        <Slider label="Earth elevation" value={earthEl} min={sky?.earth_el_min ?? -5} max={sky?.earth_el_max ?? 30} step={0.1} unit="°"
           onChange={(v) => set({ earthEl: v })} />
+        {earthEl <= 0 && <p className="note warn">Earth is below the horizon, so there is no direct link.</p>}
+        {sky && (
+          <p className="note">
+            {sky.horizon_km > 0
+              ? `Range this site can see as the Moon librates. Terrain out to ${sky.horizon_km} km and lunar curvature are included.`
+              : 'Test terrain: only this map can block the Earth or Sun.'}
+          </p>
+        )}
       </Section>
 
       <Section title="Rover">
@@ -64,10 +75,11 @@ export function Controls({ mission }: { mission: Mission | null }) {
           onChange={(v) => set({ roverSpeed: v })} />
         <Slider label="Max slope" value={s.maxSlope} min={5} max={30} step={1} unit="°"
           onChange={(v) => set({ maxSlope: v })} />
-        <Slider label="Sun azimuth" value={s.sunAz} min={0} max={359} step={1} unit="°"
+        <Slider label="Sun azimuth" value={s.sunAz ?? sky?.sun_az ?? 90} min={0} max={359} step={1} unit="°"
           onChange={(v) => set({ sunAz: v })} />
-        <Slider label="Sun elevation" value={s.sunEl} min={-5} max={30} step={0.5} unit="°"
+        <Slider label="Sun elevation" value={sunEl} min={sky?.sun_el_min ?? -5} max={sky?.sun_el_max ?? 30} step={0.1} unit="°"
           onChange={(v) => set({ sunEl: v })} />
+        {sunEl <= 0 && <p className="note warn">The Sun is below the horizon, so the rover runs on battery alone.</p>}
         <label className="check">
           <input type="checkbox" checked={s.follow} onChange={(e) => set({ follow: e.target.checked })} />
           Camera follows rover

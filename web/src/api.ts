@@ -3,6 +3,22 @@
 
 export type Vec3 = [number, number, number]
 
+/** What the sky can really do at this terrain, and how far beyond the map horizons are known. */
+export interface Sky {
+  earth_az: number
+  earth_el: number
+  earth_el_min: number
+  earth_el_max: number
+  sun_az: number
+  sun_el: number
+  sun_el_min: number
+  sun_el_max: number
+  lat: number | null
+  lon: number | null
+  goal_xy: [number, number]
+  horizon_km: number
+}
+
 export interface TerrainInfo {
   id: string
   label: string
@@ -12,10 +28,11 @@ export interface TerrainInfo {
   dy: number
   width_m: number
   height_m: number
-  earth_az: number
+  sky: Sky
 }
 
 export interface TerrainGrid {
+  sky: Sky
   id: string
   source: string
   rows: number
@@ -67,7 +84,7 @@ export interface Mission {
 export interface MissionRequest {
   terrain: string
   earth_az?: number | null
-  earth_el?: number
+  earth_el?: number | null
   outage_step?: number | null
 }
 
@@ -94,6 +111,7 @@ export interface RoverSegment {
 
 export interface RoverPlan {
   feasible: boolean
+  reached_goal?: boolean
   reason: string | null
   summary?: {
     distance_m: number

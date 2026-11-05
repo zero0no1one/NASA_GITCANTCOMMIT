@@ -24,6 +24,7 @@ export default function App() {
             <span>{mission.terrain.cols}×{mission.terrain.rows} @ {mission.terrain.dx} m</span>
             <span>eligible {mission.eligible_pct.toFixed(0)}%</span>
             <span>comms blocked {mission.comms.filter((c) => c.state === 0).length}/{mission.comms.length}</span>
+            <span>{mission.terrain.sky.horizon_km > 0 ? `horizons to ${mission.terrain.sky.horizon_km} km` : 'horizons: this map only'}</span>
           </div>
         )}
       </header>

@@ -3,6 +3,28 @@ import numpy as np
 from scipy.ndimage import map_coordinates, uniform_filter, binary_erosion
 
 
+MOON_RADIUS_M = 1737400.
+
+
+@dataclass
+class Surround:
+    """Coarser DEM around a crop, used only for distant horizons. (x0, y0) is its south-west pixel centre in crop metres."""
+    z: np.ndarray
+    dx: float
+    dy: float
+    x0: float
+    y0: float
+
+    @property
+    def box(self):
+        return self.x0, self.x0+(self.z.shape[1]-1)*self.dx, self.y0, self.y0+(self.z.shape[0]-1)*self.dy
+
+    def sample(self, x, y):
+        x, y = np.broadcast_arrays(x, y)
+        return map_coordinates(self.z, [(y.ravel()-self.y0)/self.dy, (x.ravel()-self.x0)/self.dx],
+                               order=1, mode='constant', cval=np.nan).reshape(x.shape)
+
+
 @dataclass
 class Terrain:
     z: np.ndarray
@@ -10,6 +32,7 @@ class Terrain:
     dy: float
     source: str
     metadata: dict = field(default_factory=dict)
+    surroundings: list = field(default_factory=list)   # Surround layers, nearest and finest first
 
     @property
     def width(self):
@@ -69,6 +92,18 @@ def load_dem(source, row=0, col=0, size=160, vertical_factor=1.):
                 'southwest_pixel_center': list(ds.xy(row+data.shape[0]-1, col)),
                 'transform': list(ds.window_transform(win))[:6]}
         return Terrain(np.flipud(data).copy(), tr.a, -tr.e, str(getattr(source, 'name', source)), meta)
+
+
+def load_surround(source, terrain):
+    """Read a coarser DEM of the same projection and place it in the crop's local metres."""
+    import rasterio
+    with rasterio.open(source) as ds:
+        if ds.crs is None or not ds.crs.is_projected:
+            raise ValueError('Surrounding terrain must use the same projected CRS as the crop.')
+        data = ds.read(1, masked=True).astype(float).filled(np.nan)*ds.scales[0]+ds.offsets[0]
+        sw_x, sw_y = ds.xy(ds.height-1, 0)
+        origin = terrain.metadata['southwest_pixel_center']
+        return Surround(np.flipud(data).copy(), ds.res[0], ds.res[1], sw_x-origin[0], sw_y-origin[1])
 
 
 def hazards(terrain, slope_limit=12., roughness_limit=1.5, footprint=20.):

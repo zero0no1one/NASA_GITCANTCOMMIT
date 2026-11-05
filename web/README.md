@@ -27,7 +27,8 @@ Open http://localhost:5173. The dev server forwards `/api/...` to port 8000, so 
 ## What you see
 
 - **Terrain:**
-  - the real LOLA south-pole crop (default) or the synthetic ridge;
+  - the real LOLA Leibnitz Beta plateau crop (default), a crop near the pole for comparison, or the synthetic ridge;
+  - distant terrain and lunar curvature block the Earth and Sun, and the sliders only offer positions each site can really see (see `NASA Project/data/README.md`);
   - coloured by landing hazard, slope or elevation;
   - vertical exaggeration is adjustable.
 - **Lander descent:**
