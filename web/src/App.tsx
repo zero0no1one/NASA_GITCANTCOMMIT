@@ -30,7 +30,7 @@ export default function App() {
       </header>
       <main>
         <div className="viewport">
-          {mission ? <Scene mission={mission} end={end} /> : (
+          {mission ? <Scene mission={mission} end={end} landingEnd={landingEnd} /> : (
             <div className="placeholder">{missionError ? '' : 'Loading lunar terrain… on the free server this can take a minute after it has been idle.'}</div>
           )}
           {mission && <Hud mission={mission} landingEnd={landingEnd} />}

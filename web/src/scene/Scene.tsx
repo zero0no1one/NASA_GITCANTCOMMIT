@@ -1,31 +1,33 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Line, OrbitControls, Stars } from '@react-three/drei'
 import type { Mission } from '../api'
-import { useSim } from '../state'
+import { useSim, useSimInputs } from '../state'
 import { direction, toScene } from './geo'
 import { Terrain } from './Terrain'
 import { LanderScene } from './LanderScene'
 import { Rover } from './Rover'
 
 /** Advances simulation time while playing; stops at the end of the lander + rover timeline. */
-function Clock({ end }: { end: number }) {
+function Clock({ end, landingEnd }: { end: number; landingEnd: number }) {
   useFrame((_, delta) => {
-    const { playing, rate, simTime, set } = useSim.getState()
+    const { playing, rate, simTime, replanning, set } = useSim.getState()
     if (!playing || simTime >= end) return
+    // The rover waits for its new route, so it doesn't jump ahead along it when the answer arrives.
+    if (replanning && simTime >= landingEnd) return
     set({ simTime: Math.min(end, simTime + Math.min(delta, 0.1) * rate) })
   })
   return null
 }
 
-export function Scene({ mission, end }: { mission: Mission; end: number }) {
-  const { layer, exaggeration, touchdownRank, plan, goal, sunAz, sunEl, set } = useSim()
+export function Scene({ mission, end, landingEnd }: { mission: Mission; end: number; landingEnd: number }) {
+  const { layer, exaggeration, touchdownRank, plan, goal, sunAz, sunEl, earthEl, set } = useSimInputs()
   const grid = mission.terrain
   const width = (grid.cols - 1) * grid.dx
   const height = (grid.rows - 1) * grid.dy
   const span = Math.max(width, height)
   const sunElevation = sunEl ?? grid.sky.sun_el
   const sun = direction(sunAz ?? grid.sky.sun_az, Math.max(sunElevation, 1))
-  const earth = direction(mission.earth.azimuth_deg, mission.earth.elevation_deg)
+  const earth = direction(mission.earth.azimuth_deg, earthEl ?? mission.earth.elevation_deg)
   const centre = toScene(grid, exaggeration, width / 2, height / 2, (grid.z_min + grid.z_max) / 2)
   const goalPos = goal && toScene(grid, exaggeration, goal[0], goal[1], grid.z_max)
 
@@ -55,7 +57,7 @@ export function Scene({ mission, end }: { mission: Mission; end: number }) {
         <meshStandardMaterial color="#3b82f6" emissive="#1d4ed8" emissiveIntensity={0.8} />
       </mesh>
       <OrbitControls makeDefault target={[0, 0, 0]} maxPolarAngle={Math.PI / 2.05} />
-      <Clock end={end} />
+      <Clock end={end} landingEnd={landingEnd} />
     </Canvas>
   )
 }

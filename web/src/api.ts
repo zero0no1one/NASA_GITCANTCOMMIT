@@ -152,5 +152,23 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export const fetchTerrains = () => call<TerrainInfo[]>('/api/terrains')
-export const fetchMission = (req: MissionRequest) => call<Mission>('/api/mission', req)
+
+// Terrain grids are about 98% of the data and never change for a terrain, so each is fetched once.
+const grids = new Map<string, Promise<TerrainGrid>>()
+
+function fetchGrid(id: string): Promise<TerrainGrid> {
+  let grid = grids.get(id)
+  if (!grid) {
+    grid = call<TerrainGrid>(`/api/terrain/${id}`)
+    grids.set(id, grid)
+    grid.catch(() => grids.delete(id))
+  }
+  return grid
+}
+
+export async function fetchMission(req: MissionRequest): Promise<Mission> {
+  const [mission, terrain] = await Promise.all([call<Omit<Mission, 'terrain'>>('/api/mission', req), fetchGrid(req.terrain)])
+  return { ...mission, terrain }
+}
+
 export const fetchRover = (req: RoverRequest) => call<RoverPlan>('/api/rover', req)

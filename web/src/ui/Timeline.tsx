@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { restartRun, useSim } from '../state'
 import { formatClock } from '../track'
 
@@ -15,22 +16,35 @@ export function Timeline({ end, landingEnd }: { end: number; landingEnd: number 
   const set = useSim((s) => s.set)
   const tl = plan?.timeline
 
-  let chart = null
-  if (tl && tl.t.length > 1) {
+  // The curves only change with the plan; only the playhead moves with the clock.
+  const curves = useMemo(() => {
+    if (!tl || tl.t.length < 2) return null
     const duration = tl.t[tl.t.length - 1] || 1
     const maxSpeed = Math.max(...tl.speed_m_s, 0.01)
     const x = (t: number) => (t / duration) * W
     const speed = tl.t.map((t, i) => `${x(t).toFixed(1)},${(H - (tl.speed_m_s[i] / maxSpeed) * (H - 8)).toFixed(1)}`).join(' ')
     const battery = tl.t.map((t, i) => `${x(t).toFixed(1)},${(H - (tl.battery_pct[i] / 100) * (H - 8)).toFixed(1)}`).join(' ')
-    const head = x(Math.min(Math.max(simTime - planStart, 0), duration))
     const shade = tl.t.slice(0, -1).map((t, i) => (tl.sunlit[i] ? null : (
       <rect key={i} x={x(t)} width={Math.max(x(tl.t[i + 1]) - x(t), 0.5)} y={0} height={H} className="shadow-band" />
     )))
+    return {
+      duration,
+      drawing: (
+        <>
+          {shade}
+          <polyline points={speed} className="line-speed" />
+          <polyline points={battery} className="line-battery" />
+        </>
+      ),
+    }
+  }, [tl])
+
+  let chart = null
+  if (curves) {
+    const head = (Math.min(Math.max(simTime - planStart, 0), curves.duration) / curves.duration) * W
     chart = (
       <svg viewBox={`0 0 ${W} ${H}`} className="chart" preserveAspectRatio="none">
-        {shade}
-        <polyline points={speed} className="line-speed" />
-        <polyline points={battery} className="line-battery" />
+        {curves.drawing}
         <line x1={head} x2={head} y1={0} y2={H} className="playhead" />
       </svg>
     )

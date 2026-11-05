@@ -35,7 +35,7 @@ The code must be on `main`, with the **tests**, **web** and **container** checks
 ## Free plan limits
 
 - **It sleeps.** After 15 minutes without visitors the service stops, and the next visitor waits about a minute. **Open the link a couple of minutes before you present.**
-- **It's slow per request.** The free plan has 0.1 CPU. Based on CPU time measured locally, expect roughly 1–2 s per re-route or slider change and about 5 s to load terrain the first time. These are estimates; measure on the real service.
+- **It's slow per request.** The free plan has 0.1 CPU. Measured on the live service, a re-route takes about 1 s and a Sun or max-slope change about 2.5 s. The simulation clock waits while the rover re-plans, so nothing jumps.
 - **Keep a backup.** Record a demo video in case the service or the venue's internet misbehaves.
 
 ## Run the production build on your own computer
