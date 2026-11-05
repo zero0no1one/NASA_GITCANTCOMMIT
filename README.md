@@ -2,24 +2,25 @@
 
 **Live demo: https://nasa-gitcantcommit.onrender.com/** (free hosting: it can take about a minute to wake after 15 idle minutes)
 
-Echo-Path is a research prototype for lunar landing contingencies. Using real NASA LOLA terrain, it finds where a descending lander would lose its line of sight to Earth, precomputes fallback landing sites from that exact moment, and then plans a rover's drive from wherever the lander touched down, tracking comms, sunlight and battery along the way.
+Echo-Path is a research prototype that maps coordinates on the Moon and navigates a vehicle to where the terrain says it can land. Using real NASA LOLA elevation data, it reads the ground at any latitude and longitude, recommends safe landing sites, flies a lander there and can divert it mid-flight, and then drives a rover from wherever it touched down. Along the way it tracks what terrain does to the mission: where the line of sight to Earth is lost, what's in shadow, and what fuel and battery remain.
 
 It is intended for demonstrations and early algorithm development. It is not flight software, an operational mission planner, or proof that a trajectory is safe for a real spacecraft.
 
 ## 1. What it does
 
-1. Represents a landing region as an elevation grid, using a 1.2 km crop of NASA LOLA data on the Leibnitz Beta plateau (85.45° S, 31.55° E).
-2. Finds landing hazards from slope, local roughness, missing data and, optionally, sunlight.
-3. Flies a point-mass descent to a landing target, checking fuel, thrust and terrain clearance.
-4. Finds where terrain blocks the line of sight to Earth during the descent, including terrain up to 186 km away and lunar curvature.
-5. From an outage state, searches for reachable, hazard-filtered fallback landing sites and ranks them.
-6. Plans a rover drive with A\* from the touchdown point, then reports time, speed, heading, Earth comms, sunlight and battery along the route. The rover re-plans from where it is whenever the goal or settings change.
+1. Represents a landing region as an elevation grid, using a 1.2 km crop of NASA LOLA data on the Leibnitz Beta plateau (85.45° S, 31.55° E), with real latitude and longitude for every point.
+2. Finds landing hazards from slope, local roughness, missing data and, optionally, sunlight, and explains in plain language why a spot can or can't be landed on.
+3. Ranks the best landing sites on the map by flatness, smoothness and fuel, preferring spots with Earth and the Sun in view.
+4. Flies a point-mass descent to the chosen target, checking fuel, thrust and terrain clearance, and can re-route from the lander's exact state mid-flight.
+5. Finds where terrain blocks the line of sight to Earth during the descent, including terrain up to 186 km away and lunar curvature.
+6. From a simulated outage, searches for reachable, hazard-filtered backup landing sites and ranks them.
+7. Plans a rover drive with A\* from the touchdown point, then reports time, speed, heading, Earth comms, sunlight and battery along the route. The rover re-plans from where it is whenever the goal or settings change.
 
 ## 2. Two ways to use it
 
 | | 3D app (`web/`) | Streamlit dashboard (`NASA Project/app.py`) |
 |---|---|---|
-| Best for | Demos: lander and rover in a 3D scene with live re-routing | Analysis: every lander setting, your own DEMs, batch coverage, ZIP export |
+| Best for | Choosing where to land and flying there: live coordinates, site ranking, in-flight diverts, rover | Analysis: every lander setting, your own DEMs, batch coverage, ZIP export |
 | Terrain | Built-in real sites and a synthetic test map | Synthetic, or any GeoTIFF you load |
 | Sun and Earth limits | Only what each site can really see | Free sliders |
 | Horizons | Terrain out to 186 km, with lunar curvature | Inside the loaded crop only |
@@ -98,7 +99,7 @@ python -m echo_path.rover --dem data/lola_site20_r1560_c1320.tif --surround data
 
 ## 5. Results at the default site
 
-With Earth at its mean position (3.6° elevation), comms are clear until 100 s of the 120 s descent. Full method, sources and accuracy checks are in `NASA Project/data/README.md`.
+These figures use the evaluation's fixed descent target (75% across the map), not the app's top recommended site, which keeps Earth in view for the whole descent. With Earth at its mean position (3.6° elevation), comms on this route are clear until 100 s of the 120 s descent. Full method, sources and accuracy checks are in `NASA Project/data/README.md`.
 
 | Metric | Nominal Flight | Unmitigated Outage | Echo-Path Fallback |
 |---|---:|---:|---:|
@@ -176,7 +177,11 @@ Cells over the slope or roughness limit (or with missing data) are blocked. `ast
 |---|---|
 | `GET /api/terrains` | Available terrains and each one's sky limits |
 | `GET /api/terrain/{id}` | Elevation, hazard and slope grids (cached) |
-| `POST /api/mission` | Descent, comms samples and ranked fallbacks |
+| `GET /api/terrain/{id}/horizon` | The surrounding landscape, for drawing (cached) |
+| `POST /api/sites` | Ranked landing sites with coordinates |
+| `POST /api/point` | Ground conditions and Earth and Sun visibility at a spot |
+| `POST /api/mission` | Descent to a target, comms samples and ranked backups |
+| `POST /api/divert` | A new route from the lander's current state |
 | `POST /api/rover` | Rover route, timeline and summary |
 | `GET /api/health` | Health check |
 
@@ -213,18 +218,19 @@ python -m pip install -r api/requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-The 69 tests cover hazards, line of sight, far terrain and curvature, Sun and Earth geometry, descent physics, fallback search, A\* and smoothing, battery behaviour, GeoTIFF loading, the bundled data, the evaluation, the API and the Streamlit dashboard.
+The 76 tests cover hazards, line of sight, far terrain and curvature, Sun and Earth geometry, descent physics, fallback search, A\* and smoothing, battery behaviour, GeoTIFF loading, the bundled data, the evaluation, the API and the Streamlit dashboard.
 
 Every push and pull request to `main` also runs lint and a build of the 3D app, then builds the deployable container and tests it under a 512 MB memory limit.
 
 **Manual checks.** For the dashboard, follow the checklist in `NASA Project/README.md`. For the 3D app:
 
-1. The default run shows the lander losing comms at 100 s and diverting to fallback #1.
-2. After touchdown, the rover drives to the goal with a live HUD.
-3. Clicking the terrain mid-drive makes the rover pause briefly, then turn toward the new goal, leaving a dashed trail.
-4. Scrubbing back past that re-route shows the rover on its old route.
-5. Moving the Earth slider does not restart the run.
-6. The near-pole terrain shows Earth below the horizon and all samples blocked.
+1. Moving the cursor over the Moon updates the large coordinate and the reticle, which turns orange over ground that can't be landed on.
+2. Clicking a numbered flag or list row chooses that site; **Begin descent** flies there.
+3. Typing `-85.4583` and `31.4883` under **Go to coordinates** and choosing **Divert here** during descent changes course mid-flight without restarting.
+4. After touchdown, the rover drives to its goal. Clicking the terrain mid-drive makes it pause briefly, then turn toward the new goal, leaving a dashed trail.
+5. Scrubbing back past that re-route shows the rover on its old route.
+6. Moving the Earth slider does not restart the run.
+7. The **Horizon** camera shows Earth above the lunar horizon. The near-pole terrain shows Earth below the horizon and all samples blocked.
 
 ## 10. Known limitations
 

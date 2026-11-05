@@ -29,6 +29,78 @@ class ApiTests(unittest.TestCase):
         self.assertIsNone(plain.headers.get('content-encoding'))
         self.assertEqual(plain.json()['rows'], t['rows'])
 
+    def test_terrain_carries_what_the_map_needs(self):
+        t = self.client.get('/api/terrain/lola_site20').json()
+        self.assertEqual(len(t['roughness']), len(t['z']))
+        self.assertEqual(len(t['origin_xy']), 2)
+        self.assertEqual(t['slope_limit'], 12.)
+        self.assertIsNone(self.client.get('/api/terrain/synthetic').json()['origin_xy'])
+
+    def test_horizon_layer_surrounds_the_crop(self):
+        h = self.client.get('/api/terrain/lola_site20/horizon').json()
+        self.assertEqual(len(h['z']), h['rows']*h['cols'])
+        self.assertLessEqual(max(h['rows'], h['cols']), 201)
+        self.assertLess(h['x0'], 0)
+        self.assertGreater(h['x0']+(h['cols']-1)*h['dx'], 1195)
+        self.assertEqual(self.client.get('/api/terrain/synthetic/horizon').json()['rows'], 0)
+        self.assertEqual(self.client.get('/api/terrain/mars/horizon').status_code, 404)
+
+    def test_landing_sites_are_ranked_spread_out_and_located(self):
+        r = self.client.post('/api/sites', json={'terrain': 'lola_site20'}).json()
+        sites = r['sites']
+        self.assertGreaterEqual(len(sites), 3)
+        self.assertLessEqual(len(sites), 5)
+        self.assertEqual([s['score'] for s in sites], sorted(s['score'] for s in sites))
+        for s in sites:
+            self.assertLess(s['slope_deg'], 12.)
+            self.assertAlmostEqual(s['lat'], -85.45, delta=.05)
+            self.assertAlmostEqual(s['lon'], 31.55, delta=.5)
+            self.assertGreater(s['fuel_remaining_kg'], 0.)
+            self.assertIsInstance(s['earth_visible'], bool)
+        for i, a in enumerate(sites):
+            for b in sites[i+1:]:
+                self.assertGreaterEqual(((a['x_m']-b['x_m'])**2+(a['y_m']-b['y_m'])**2)**.5, 90.)
+
+    def test_sites_without_real_coordinates_say_so(self):
+        s = self.client.post('/api/sites', json={'terrain': 'synthetic'}).json()['sites'][0]
+        self.assertIsNone(s['lat'])
+
+    def test_point_reports_ground_and_sky(self):
+        safe = self.client.post('/api/point', json={'terrain': 'lola_site20', 'x': 475, 'y': 495}).json()
+        self.assertTrue(safe['eligible'])
+        self.assertLess(safe['hazard'], 1.)
+        self.assertAlmostEqual(safe['lat'], -85.45, delta=.05)
+        self.assertIsInstance(safe['earth_visible'], bool)
+        edge = self.client.post('/api/point', json={'terrain': 'lola_site20', 'x': 0, 'y': 0}).json()
+        self.assertFalse(edge['eligible'])
+        self.assertEqual(self.client.post('/api/point', json={'terrain': 'lola_site20', 'x': 9e6, 'y': 0}).status_code, 422)
+
+    def test_mission_flies_to_a_chosen_target(self):
+        m = self.client.post('/api/mission', json={'terrain': 'lola_site20', 'target_xy': [475, 495]}).json()
+        self.assertTrue(m['nominal']['feasible'])
+        self.assertAlmostEqual(m['nominal']['touchdown'][0], 475, delta=.1)
+        self.assertAlmostEqual(m['nominal']['touchdown'][1], 495, delta=.1)
+        self.assertTrue(m['target']['eligible'])
+        n = m['nominal']
+        self.assertEqual(len(n['velocity']), len(n['path']))
+        self.assertEqual(len(n['mass_kg']), len(n['path']))
+        self.assertEqual(len(n['link']), len(n['path']))
+        self.assertEqual(self.client.post('/api/mission', json={'target_xy': [1e7, 0]}).status_code, 422)
+
+    def test_divert_replans_from_the_current_state(self):
+        m = self.client.post('/api/mission', json={'terrain': 'lola_site20', 'target_xy': [900, 600]}).json()['nominal']
+        i = 100
+        body = {'terrain': 'lola_site20', 'position': m['path'][i], 'velocity': m['velocity'][i], 'mass': m['mass_kg'][i],
+                'remaining_s': m['time_s'][-1]-m['time_s'][i], 'target': [475, 495]}
+        d = self.client.post('/api/divert', json=body).json()
+        self.assertTrue(d['feasible'], d['reasons'])
+        self.assertEqual(d['path'][0], m['path'][i])
+        self.assertAlmostEqual(d['touchdown'][0], 475, delta=.1)
+        too_late = self.client.post('/api/divert', json={**body, 'remaining_s': 1., 'target': [10, 1190]}).json()
+        self.assertFalse(too_late['feasible'])
+        self.assertTrue(too_late['reasons'])
+        self.assertEqual(self.client.post('/api/divert', json={**body, 'target': [9e6, 0]}).status_code, 422)
+
     def test_terrain_grid_inputs_are_checked(self):
         self.assertEqual(self.client.get('/api/terrain/mars').status_code, 404)
         self.assertEqual(self.client.get('/api/terrain/lola_site20?slope=0').status_code, 422)

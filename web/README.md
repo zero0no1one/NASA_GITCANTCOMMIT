@@ -1,6 +1,6 @@
 # Echo-Path 3D
 
-Interactive 3D lander + rover simulation built with Vite, React, TypeScript and Three.js (via React Three Fiber). All the physics runs in the Python engine (`NASA Project/echo_path/`), served by a small FastAPI app (`NASA Project/api/`). The Streamlit dashboard (`NASA Project/app.py`) still works on its own.
+A landing navigator on real lunar terrain: read the coordinates of any point on the Moon, see whether the ground there can be landed on, fly the lander there, then drive the rover. Built with Vite, React, TypeScript and Three.js (via React Three Fiber). All the physics runs in the Python engine (`NASA Project/echo_path/`), served by a small FastAPI app (`NASA Project/api/`).
 
 ## Run it
 
@@ -24,40 +24,44 @@ npm run dev
 
 Open http://localhost:5173. The dev server forwards `/api/...` to port 8000, so both must be running.
 
-## What you see
+## How it works
 
-- **Terrain:**
-  - the real LOLA Leibnitz Beta plateau crop (default), a crop near the pole for comparison, or the synthetic ridge;
-  - distant terrain and lunar curvature block the Earth and Sun, and the sliders only offer positions each site can really see (see `NASA Project/data/README.md`);
-  - coloured by landing hazard, slope or elevation;
-  - vertical exaggeration is adjustable.
-- **Lander descent:**
-  - the nominal route (dashed blue);
-  - comms samples (red = blocked by terrain), with the selected outage shown in white;
-  - the three ranked fallback routes and touchdown pads.
-  - The white cone flies the nominal route until the outage, then the selected touchdown route.
-- **Rover traverse:**
-  - after touchdown the rover drives an A\* route to the goal (orange pole);
-  - the route is coloured by Earth line of sight (blue = clear, red = blocked);
-  - the HUD shows mission time, speed, heading, battery, comms and sunlight;
-  - the panel at the bottom charts speed and battery (grey bands = shadow) and lists each route leg with timestamps, heading and average speed.
-- **Real-time re-routing:**
-  - click anywhere on the terrain, or change goal, speed, max slope or Sun direction;
-  - the rover re-plans *from where it is now* and steers onto the new route;
-  - the ground already driven stays as a dashed trail.
+**Plan: where to land.** The app ranks landing sites on the terrain by how flat and smooth the ground is and the fuel to reach it, preferring spots with Earth and the Sun in view. Move the cursor over the Moon to read its real latitude and longitude, elevation and slope. Click a spot, or type coordinates under **Go to coordinates**, to check it: the panel says whether it's safe to land and why not if it isn't, and whether Earth and the Sun are in view from there. Then choose **Land here**, and **Begin descent**.
+
+**Descend.** The lander flies the route, gold while it has contact with Earth and dashed orange when terrain blocks the link. The panel shows altitude, descent rate, distance and bearing to the target, and fuel. To change course mid-flight, click a spot and choose **Divert here**: the new route starts from the lander's exact position, velocity and remaining fuel, and the app tells you if it can't get there.
+
+**Drive.** After touchdown the rover drives an A\* route to its goal. Click anywhere to send it there and it turns from where it is now, leaving a dashed trail of where it has been. The route is blue where Earth is in view and orange where it's blocked. The panel shows speed, heading, battery and sunlight, with a speed and battery chart and the timing of each route leg.
+
+**Plan for losing contact**, in the plan panel, lets you simulate losing contact at any moment and choose a precomputed backup site to divert to.
+
+### On the map
+
+- **Layers:** *Surface* shows the terrain lit by the Sun; *Landing safety*, *Slope* and *Height* tint it while keeping the relief visible.
+- **Camera:** *Overview*, *Horizon* (a view from the ground with Earth in the sky) and *Follow vehicle*.
+- **Realism:** real LOLA elevations at 5 m per pixel, shadows from the Sun's real direction, NASA's surrounding terrain out to the horizon, and the Earth and Sun at their true positions and sizes. Earth's phase comes from the real lighting. The vehicles are drawn 7× life size so they can be seen on a kilometre-wide map, and height is exaggerated 1.5× by default (adjustable).
+- **Terrains:** the Leibnitz Beta plateau (default), a site near the pole where Earth is low or hidden, and a synthetic test map where only the map itself can block the Earth or Sun, which the app points out.
 
 ## Code map
 
 | Path | What it does |
 |---|---|
 | `src/api.ts` | Response types (mirror `NASA Project/api/main.py`) and fetch helpers |
-| `src/state.ts` | Zustand store: inputs, mission, rover plan, playback clock |
-| `src/usePlanner.ts` | Fetches the mission, and re-plans the rover when inputs change |
-| `src/track.ts` | Time interpolation along lander and rover timelines |
-| `src/scene/` | Three.js scene: terrain mesh, lander paths, rover model, camera |
-| `src/ui/` | HUD, control panel, timeline chart and leg table |
+| `src/coords.ts` | Latitude/longitude conversion, grid sampling, plain-language landing verdicts |
+| `src/state.ts` | Zustand store: inputs, flight plan, rover plan, playback clock |
+| `src/usePlanner.ts` | Fetches sites and the flight plan, and re-plans the rover when inputs change |
+| `src/track.ts` | Builds the flown route and interpolates along it |
+| `src/scene/` | Three.js scene: terrain, horizon, sky, coordinate grid, reticle, lander, rover, camera |
+| `src/ui/` | Coordinate readout, plan, descent and drive panels, spot inspector, settings, timeline |
 
-Coordinates: the engine uses x = east, y = north, z = up (metres). `scene/geo.ts` maps them to Three.js (x, up, −north), centred on the terrain.
+Coordinates: the engine uses x = east, y = north, z = up (metres). `scene/geo.ts` maps them to Three.js (x, up, −north), centred on the terrain. `coords.ts` converts them to latitude and longitude using the terrain's south polar stereographic origin.
+
+**Changing terrain responses:** browsers cache them for an hour, so bump `TERRAIN_DATA_VERSION` in `src/api.ts` whenever their fields change.
+
+## Design
+
+Colours come from the subject: true black sky, Kapton foil gold for actions and your route, Earth blue only for the comms link, orange for warnings. Headings and the large coordinate are set in Jost, a descendant of Futura, the typeface on the Apollo 11 plaque. The landing reticle is based on the grid etched on the Apollo Lunar Module window for choosing a landing point. Data is in IBM Plex Sans with tabular figures, so numbers don't jitter as they change.
+
+The layout adapts below 900 px wide: readout, then the Moon, playback, panels and view tools in a single column. Controls are keyboard accessible, and reduced-motion settings are respected.
 
 ## Checks
 
@@ -66,4 +70,4 @@ npm run lint
 npm run build   # TypeScript type-check + production bundle
 ```
 
-CI runs both on every push and pull request, alongside the Python tests.
+CI runs both on every push and pull request, alongside the Python tests and a container build.
