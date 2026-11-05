@@ -5,13 +5,15 @@ Grids are flattened row-major with row 0 at the south edge; x = col*dx, y = row*
 If the web app has been built (web/dist, or the folder in ECHO_PATH_WEB_DIST), it is served from
 the same address, so one process is the whole deployable site.
 """
+import gzip
+import json
 import os
 from dataclasses import asdict, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Optional
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -159,6 +161,29 @@ def terrains():
     return out
 
 
+@lru_cache(maxsize=8)
+def _terrain_payload(terrain_id, slope, roughness, footprint):
+    """Grids only change with the terrain and limits, so they are encoded and compressed once."""
+    t = _load(terrain_id)
+    h = _hazards(terrain_id, slope, roughness, footprint)
+    raw = json.dumps({'id': terrain_id, 'source': t.source, 'rows': t.z.shape[0], 'cols': t.z.shape[1], 'dx': t.dx, 'dy': t.dy,
+                      'z_min': float(np.nanmin(t.z)), 'z_max': float(np.nanmax(t.z)), 'nodata': -9999.,
+                      'z': _grid(t.z, 2), 'hazard': _grid(h['hazard'], 3), 'slope': _grid(h['slope'], 2),
+                      'sky': _sky(terrain_id)}, separators=(',', ':')).encode()
+    return raw, gzip.compress(raw, 6)
+
+
+@app.get('/api/terrain/{terrain_id}')
+def terrain_grids(terrain_id: str, request: Request, slope: float = Query(12., gt=0, le=90),
+                  roughness: float = Query(1.5, gt=0), footprint: float = Query(30., gt=0)):
+    _terrain(terrain_id)
+    raw, packed = _terrain_payload(terrain_id, slope, roughness, footprint)
+    headers = {'Cache-Control': 'public, max-age=3600', 'Vary': 'Accept-Encoding'}
+    if 'gzip' in request.headers.get('accept-encoding', ''):
+        return Response(packed, media_type='application/json', headers={**headers, 'Content-Encoding': 'gzip'})
+    return Response(raw, media_type='application/json', headers=headers)
+
+
 @app.post('/api/mission')
 def mission(req: MissionRequest):
     t = _terrain(req.terrain)
@@ -196,9 +221,7 @@ def mission(req: MissionRequest):
                           'touchdown': _xyz(route['position'][-1]), 'path': _xyz(route['position'][keep]),
                           'time_s': _xyz(route['t'][keep])})
     return {
-        'terrain': {'id': req.terrain, 'source': t.source, 'rows': t.z.shape[0], 'cols': t.z.shape[1], 'dx': t.dx, 'dy': t.dy,
-                    'z_min': float(np.nanmin(t.z)), 'z_max': float(np.nanmax(t.z)), 'nodata': -9999.,
-                    'z': _grid(t.z, 2), 'hazard': _grid(h['hazard'], 3), 'slope': _grid(h['slope'], 2), 'sky': sky},
+        'terrain_id': req.terrain,
         'eligible_pct': float(100*h['safe'].mean()),
         'earth': {'azimuth_deg': earth_az, 'elevation_deg': earth_el},
         'nominal': {'feasible': nominal['feasible'], 'reasons': nominal['reasons'], 'fuel_used_kg': nominal['fuel_used'],

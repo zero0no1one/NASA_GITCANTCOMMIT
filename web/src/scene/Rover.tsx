@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Line } from '@react-three/drei'
 import * as THREE from 'three'
 import type { RoverTimeline, TerrainGrid } from '../api'
-import { useSim } from '../state'
+import { roverAt, useSim } from '../state'
 import { sampleRover } from '../track'
 import { toScene } from './geo'
 
@@ -58,11 +58,19 @@ export function Rover({ grid, timeline, exaggeration }: Props) {
   const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update: () => void } | null
   const camera = useThree((s) => s.camera)
   const placed = useRef(false)
-  const trail = useSim((s) => s.trail)
-  const trailPoints = useMemo(
-    () => trail.map(([x, y, z]) => toScene(grid, exaggeration, x, y, z)).map(([a, b, c]) => new THREE.Vector3(a, b + 1.5, c)),
-    [grid, trail, exaggeration],
-  )
+  const history = useSim((s) => s.history)
+  const trailPoints = useMemo(() => {
+    const point = (x: number, y: number, z: number) => {
+      const [a, b, c] = toScene(grid, exaggeration, x, y, z)
+      return new THREE.Vector3(a, b + 1.5, c)
+    }
+    return history.flatMap((leg) => {
+      const driven = leg.timeline.t.flatMap((t, i) =>
+        t < leg.end - leg.start ? [point(leg.timeline.x[i], leg.timeline.y[i], leg.timeline.z[i])] : [])
+      const last = sampleRover(leg.timeline, leg.end - leg.start)
+      return [...driven, point(last.x, last.y, last.z)]
+    })
+  }, [grid, history, exaggeration])
 
   const route = useMemo(() => {
     const points = timeline.x.map((x, i) => {
@@ -76,10 +84,11 @@ export function Rover({ grid, timeline, exaggeration }: Props) {
   useFrame((_, delta) => {
     const g = body.current
     if (!g) return
-    const { simTime, planStart, follow } = useSim.getState()
-    g.visible = simTime >= planStart
-    if (!g.visible) return
-    const s = sampleRover(timeline, simTime - planStart)
+    const state = useSim.getState()
+    const s = roverAt(state, state.simTime)
+    g.visible = s !== null
+    if (!s) return
+    const { follow } = state
     const [x, y, z] = toScene(grid, exaggeration, s.x, s.y, s.z)
     const before = g.position.clone()
     g.position.set(x, y, z)

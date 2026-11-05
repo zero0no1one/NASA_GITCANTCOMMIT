@@ -1,6 +1,6 @@
 import type { Mission } from '../api'
-import { useSim } from '../state'
-import { formatClock, landerTrack, sampleRover } from '../track'
+import { roverAt, useSim } from '../state'
+import { formatClock, landerTrack } from '../track'
 
 const COMMS_LABEL: Record<number, [string, string]> = { 1: ['Clear', 'ok'], 0: ['Blocked', 'bad'], [-1]: ['Unknown', 'warn'] }
 
@@ -8,6 +8,7 @@ export function Hud({ mission, landingEnd }: { mission: Mission; landingEnd: num
   const simTime = useSim((s) => s.simTime)
   const plan = useSim((s) => s.plan)
   const planStart = useSim((s) => s.planStart)
+  const history = useSim((s) => s.history)
   const rank = useSim((s) => s.touchdownRank)
   const replanning = useSim((s) => s.replanning)
 
@@ -26,8 +27,8 @@ export function Hud({ mission, landingEnd }: { mission: Mission; landingEnd: num
     )
   }
 
-  const tl = plan?.timeline
-  if (!tl) {
+  const r = roverAt({ plan, planStart, history }, simTime)
+  if (!r) {
     return (
       <div className="hud">
         <div className="hud-phase">Landed</div>
@@ -36,7 +37,6 @@ export function Hud({ mission, landingEnd }: { mission: Mission; landingEnd: num
       </div>
     )
   }
-  const r = sampleRover(tl, simTime - planStart)
   const [comms, tone] = COMMS_LABEL[r.comms] ?? COMMS_LABEL[-1]
   const mapOnly = mission.terrain.sky.horizon_km === 0
   const phase = !r.done ? 'Rover traverse' : plan?.reached_goal === false ? 'Rover stopped: battery empty' : 'Rover at goal'

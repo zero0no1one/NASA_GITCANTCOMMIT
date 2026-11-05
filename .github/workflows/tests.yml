@@ -68,5 +68,6 @@ jobs:
           for i in $(seq 1 30); do curl -fs http://localhost:8000/api/health && break; sleep 2; done
           curl -fs http://localhost:8000/ | grep -q "Echo-Path 3D"
           curl -fs http://localhost:8000/api/terrains > /dev/null
+          curl -fs http://localhost:8000/api/terrain/lola_site20 > /dev/null
           curl -fs -X POST -H 'Content-Type: application/json' -d '{"terrain":"lola_site20"}' http://localhost:8000/api/mission > /dev/null
           curl -fs -X POST -H 'Content-Type: application/json' -d '{"terrain":"lola_site20","start":[900,600],"goal":[180,1020]}' http://localhost:8000/api/rover | grep -q '"reached_goal":true'

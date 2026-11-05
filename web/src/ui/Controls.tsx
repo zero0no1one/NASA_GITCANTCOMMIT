@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
 import type { Mission } from '../api'
-import { useSim, type Layer } from '../state'
+import { restartRun, useSimInputs, type Layer } from '../state'
 
 export function Controls({ mission }: { mission: Mission | null }) {
-  const s = useSim()
+  const s = useSimInputs()
   const { set } = s
   const grid = mission?.terrain
   const width = grid ? (grid.cols - 1) * grid.dx : 1000
@@ -15,7 +15,7 @@ export function Controls({ mission }: { mission: Mission | null }) {
   return (
     <aside className="controls">
       <Section title="Terrain">
-        <select value={s.terrainId} onChange={(e) => set({ terrainId: e.target.value, earthAz: null, earthEl: null, sunAz: null, sunEl: null, outageStep: null })}>
+        <select value={s.terrainId} onChange={(e) => set({ terrainId: e.target.value, earthAz: null, earthEl: null, missionEarthEl: null, sunAz: null, sunEl: null, outageStep: null })}>
           {s.terrains.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
         </select>
         <div className="seg">
@@ -43,7 +43,10 @@ export function Controls({ mission }: { mission: Mission | null }) {
             </label>
             <label className="field">
               <span>Touchdown</span>
-              <select value={s.touchdownRank} onChange={(e) => set({ touchdownRank: Number(e.target.value) })}>
+              <select value={s.touchdownRank} onChange={(e) => {
+                set({ touchdownRank: Number(e.target.value) })
+                restartRun()
+              }}>
                 <option value={0}>Nominal target (no divert)</option>
                 {mission.fallbacks.map((f) => (
                   <option key={f.rank} value={f.rank}>Fallback #{f.rank} · H {f.hazard.toFixed(2)} · {f.slope_deg.toFixed(1)}°</option>

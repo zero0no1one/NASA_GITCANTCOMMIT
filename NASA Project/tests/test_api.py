@@ -14,9 +14,33 @@ class ApiTests(unittest.TestCase):
     def test_health_check(self):
         self.assertEqual(self.client.get('/api/health').json(), {'status': 'ok'})
 
-    def test_large_responses_are_compressed(self):
-        r = self.client.post('/api/mission', json={'terrain': 'lola_site20'}, headers={'Accept-Encoding': 'gzip'})
+    def test_terrain_grids_are_compressed_cacheable_and_valid(self):
+        r = self.client.get('/api/terrain/lola_site20', headers={'Accept-Encoding': 'gzip'})
+        self.assertEqual(r.status_code, 200)
         self.assertEqual(r.headers.get('content-encoding'), 'gzip')
+        self.assertIn('max-age', r.headers['cache-control'])
+        self.assertEqual(r.headers['content-type'], 'application/json')
+        t = r.json()                 # fails if the body was compressed twice
+        self.assertEqual(len(t['z']), t['rows']*t['cols'])
+        self.assertEqual(len(t['hazard']), len(t['z']))
+        self.assertEqual(len(t['slope']), len(t['z']))
+        self.assertEqual(t['sky']['horizon_km'], 186)
+        plain = self.client.get('/api/terrain/lola_site20', headers={'Accept-Encoding': 'identity'})
+        self.assertIsNone(plain.headers.get('content-encoding'))
+        self.assertEqual(plain.json()['rows'], t['rows'])
+
+    def test_terrain_grid_inputs_are_checked(self):
+        self.assertEqual(self.client.get('/api/terrain/mars').status_code, 404)
+        self.assertEqual(self.client.get('/api/terrain/lola_site20?slope=0').status_code, 422)
+        strict = self.client.get('/api/terrain/lola_site20?slope=5').json()
+        self.assertGreater(sum(h == 1 for h in strict['hazard']),
+                           sum(h == 1 for h in self.client.get('/api/terrain/lola_site20').json()['hazard']))
+
+    def test_mission_leaves_grids_out_so_it_stays_small(self):
+        r = self.client.post('/api/mission', json={'terrain': 'lola_site20'})
+        self.assertLess(len(r.content), 100_000)
+        self.assertEqual(r.json()['terrain_id'], 'lola_site20')
+        self.assertNotIn('terrain', r.json())
 
     def test_built_web_app_is_served_alongside_the_api(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -48,7 +72,7 @@ class ApiTests(unittest.TestCase):
 
     def test_mission_defaults_to_the_site_sky_and_earth_drops_out_partway(self):
         m = self.client.post('/api/mission', json={'terrain': 'lola_site20'}).json()
-        sky = m['terrain']['sky']
+        sky = self.client.get('/api/terrain/lola_site20').json()['sky']
         self.assertEqual(m['earth']['elevation_deg'], sky['earth_el'])
         states = [c['state'] for c in m['comms']]
         self.assertEqual(states[0], 1)
@@ -64,11 +88,8 @@ class ApiTests(unittest.TestCase):
         self.assertLess(r['summary']['comms_blocked_pct'], 100.)
         self.assertIsNone(self.client.post('/api/rover', json={**base, 'sun_el': None}).json()['sun'])
 
-    def test_mission_returns_grid_routes_and_comms(self):
+    def test_mission_returns_routes_and_comms(self):
         m = self.client.post('/api/mission', json={}).json()
-        t = m['terrain']
-        self.assertEqual(len(t['z']), t['rows']*t['cols'])
-        self.assertEqual(len(t['hazard']), len(t['z']))
         self.assertTrue(m['nominal']['feasible'])
         self.assertEqual(len(m['comms']), 31)
         self.assertEqual(m['comms'][m['outage']['step']]['state'], 0)
