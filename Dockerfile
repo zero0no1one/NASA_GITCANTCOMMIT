@@ -7,6 +7,8 @@ COPY web/ ./
 RUN npm run build
 
 FROM python:3.13-slim
+# Rasterio's Linux package expects this system library, which the slim image leaves out.
+RUN apt-get update && apt-get install -y --no-install-recommends libexpat1 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY ["NASA Project/api/requirements-deploy.txt", "./"]
 RUN pip install --no-cache-dir -r requirements-deploy.txt
@@ -14,6 +16,8 @@ COPY ["NASA Project/echo_path", "./echo_path"]
 COPY ["NASA Project/api", "./api"]
 COPY ["NASA Project/data", "./data"]
 COPY --from=web /web/dist ./web_dist
+# Fail the build, not the live site, if the terrain files can't be read in this image.
+RUN python -c "from api.main import terrains; terrains()"
 ENV ECHO_PATH_WEB_DIST=/app/web_dist
 ENV PYTHONUNBUFFERED=1
 RUN useradd --uid 1000 --create-home app
