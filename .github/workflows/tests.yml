@@ -52,3 +52,22 @@ jobs:
 
       - name: Type-check and build
         run: npm run build
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the deployable image
+        run: docker build -t echo-path .
+
+      - name: Check the site works, under the free hosting plan's memory limit
+        run: |
+          docker run -d --name site --memory 512m -p 8000:8000 echo-path
+          for i in $(seq 1 30); do curl -fs http://localhost:8000/api/health && break; sleep 2; done
+          curl -fs http://localhost:8000/ | grep -q "Echo-Path 3D"
+          curl -fs http://localhost:8000/api/terrains > /dev/null
+          curl -fs -X POST -H 'Content-Type: application/json' -d '{"terrain":"lola_site20"}' http://localhost:8000/api/mission > /dev/null
+          curl -fs -X POST -H 'Content-Type: application/json' -d '{"terrain":"lola_site20","start":[900,600],"goal":[180,1020]}' http://localhost:8000/api/rover | grep -q '"reached_goal":true'
+          docker stats --no-stream site
+          docker logs site | tail -n 20

@@ -2,7 +2,10 @@
 
 Run from "NASA Project":  python -m uvicorn api.main:app --reload
 Grids are flattened row-major with row 0 at the south edge; x = col*dx, y = row*dy, in metres.
+If the web app has been built (web/dist, or the folder in ECHO_PATH_WEB_DIST), it is served from
+the same address, so one process is the whole deployable site.
 """
+import os
 from dataclasses import asdict, replace
 from functools import lru_cache
 from pathlib import Path
@@ -10,6 +13,8 @@ from typing import Annotated, Optional
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 from echo_path.terrain import synthetic, load_dem, load_surround, hazards
 from echo_path.astro import site_of, sky_limits
@@ -19,6 +24,7 @@ from echo_path.routing import plan_fallbacks
 from echo_path.rover import Rover, traversability, plan_rover
 
 DATA = Path(__file__).resolve().parents[1] / 'data'
+WEB_DIST = Path(os.environ.get('ECHO_PATH_WEB_DIST', Path(__file__).resolve().parents[2] / 'web' / 'dist'))
 POLAR_LAYER = 'lola_south_pole_surround_640m.tif'
 TERRAINS = {
     'lola_site20': {'label': 'LOLA Leibnitz Beta plateau, PGDA Site20 (85.45°S, 31.55°E)',
@@ -37,6 +43,7 @@ SAMPLES = 31
 app = FastAPI(title='Echo-Path API')
 app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173'],
                    allow_methods=['*'], allow_headers=['*'])
+app.add_middleware(GZipMiddleware, minimum_size=1024)   # a mission response is about 1 MB of JSON
 
 
 def _terrain(terrain_id):
@@ -137,6 +144,11 @@ class RoverRequest(BaseModel):
     start_battery_pct: Percent = 100.
 
 
+@app.get('/api/health')
+def health():
+    return {'status': 'ok'}
+
+
 @app.get('/api/terrains')
 def terrains():
     out = []
@@ -219,3 +231,12 @@ def rover(req: RoverRequest):
     result['earth'] = {'azimuth_deg': earth_az, 'elevation_deg': earth_el}
     result['sun'] = None if sun_el is None else {'azimuth_deg': sun_az, 'elevation_deg': sun_el}
     return result
+
+
+def mount_web(target, folder):
+    """Serve the built web app at the site root. Registered last so /api routes take priority."""
+    if Path(folder).is_dir():
+        target.mount('/', StaticFiles(directory=folder, html=True), name='web')
+
+
+mount_web(app, WEB_DIST)
