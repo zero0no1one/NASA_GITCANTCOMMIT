@@ -2,13 +2,13 @@ import numpy as np
 from .trajectory import trajectory
 
 
-def candidates(terrain, hazard, start, limit=16):
+def candidates(terrain, hazard, start, limit=16, separation=None):
     cells = np.argwhere(hazard['safe'])
     if not len(cells): return []
     distance = np.hypot(cells[:, 1]*terrain.dx-start[0], cells[:, 0]*terrain.dy-start[1])
     score = hazard['hazard'][cells[:, 0], cells[:, 1]] + .25*distance/max(terrain.width, terrain.height)
     selected = []
-    separation = 4*max(terrain.dx, terrain.dy)
+    separation = separation or 4*max(terrain.dx, terrain.dy)
     # Always evaluate the nearest eligible site: late outages may permit only
     # a tiny divert even when a distant flatter site has a better heuristic score.
     order = np.concatenate(([np.argmin(distance)], np.argsort(score)))
@@ -21,7 +21,7 @@ def candidates(terrain, hazard, start, limit=16):
     return selected
 
 
-def plan_fallbacks(terrain, hazard, nominal, index, vehicle, count=3):
+def plan_fallbacks(terrain, hazard, nominal, index, vehicle, count=3, limit=16, separation=None):
     start = nominal['position'][index]
     velocity = nominal['velocity'][index]
     mass = nominal['mass'][index]
@@ -29,7 +29,7 @@ def plan_fallbacks(terrain, hazard, nominal, index, vehicle, count=3):
     if remaining < 2 or mass <= vehicle.dry_mass:
         return [], {'tested': 0, 'rejected': {'No flight time or fuel remaining': 1}}
     results, rejected, tested = [], {}, 0
-    for row, col, point in candidates(terrain, hazard, start):
+    for row, col, point in candidates(terrain, hazard, start, limit, separation):
         best = None
         for factor in (.8, 1., 1.25):
             route = trajectory(terrain, start, velocity, point, max(4, remaining*factor), mass, vehicle)

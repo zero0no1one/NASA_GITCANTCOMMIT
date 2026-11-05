@@ -10,7 +10,8 @@ Every number here comes from the current code and can be reproduced with the com
 |---|---|---|
 | 1 | Which Space Apps 2026 challenge does this answer? | Left as `[challenge name]` |
 | 2 | Who are the authors? | Left for the team |
-| 3 | Why does losing comms matter? (see §3) | Losing the link removes ground oversight and any late retargeting, so vetted alternatives must already be on board |
+| 3 | **What is the project's main purpose?** The team now describes it as mapping coordinates and navigating a vehicle to where the terrain says it can land, and the app is built around that. The text below still leads with comms outages. Choose which to lead with, then adjust the abstract, §3 and §10 | Not yet changed: this draft predates that decision. It also doesn't yet cover site ranking (`/api/sites`) or in-flight diverts (`/api/divert`) |
+| 3b | If outages stay in the paper, why does losing comms matter? (see §3) | Losing the link removes ground oversight and any late retargeting, so vetted alternatives must already be on board |
 | 4 | Is the "Unmitigated Outage" scenario acceptable? (see §8.3) | Yes, clearly labelled as a constructed scenario |
 | 5 | Project title | Option B, which fits a planning tool and doesn't claim autonomy |
 | 6 | Does the paper need to disclose AI assistance? | Check the current Space Apps rules |

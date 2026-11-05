@@ -19,7 +19,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 from echo_path.terrain import synthetic, load_dem, load_surround, hazards
-from echo_path.astro import site_of, sky_limits
+from echo_path.astro import grid_to_lat_lon, site_of, sky_limits
 from echo_path.comms import visibility
 from echo_path.trajectory import Vehicle, trajectory
 from echo_path.routing import plan_fallbacks
@@ -41,6 +41,12 @@ SYNTHETIC_SKY = {'earth_az': 270., 'earth_el': 3., 'earth_el_min': -5., 'earth_e
                  'sun_az': 90., 'sun_el': 5., 'sun_el_min': -5., 'sun_el_max': 30., 'lat': None, 'lon': None}
 SUN_DEFAULT_FRACTION = .8   # a typical high Sun for the site, below its absolute peak
 SAMPLES = 31
+HORIZON_CELLS = 200         # the landscape drawn around the crop is thinned to about this many cells a side
+SITE_COUNT = 5
+SITE_CANDIDATES = 8
+SITE_SPACING_FRACTION = .08 # recommended sites stay this fraction of the map apart, so they offer real choices
+SITE_NO_VIEW_PENALTY = .1   # added to a site's score for each of Earth and Sun it can't see
+LANDER_ANTENNA_M = 3.
 
 app = FastAPI(title='Echo-Path API')
 app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173'],
@@ -104,6 +110,45 @@ def _xyz(p, digits=2):
     return np.round(np.asarray(p, float), digits).tolist()
 
 
+def _route_json(route, points, terrain, earth_az, earth_el):
+    """A flown route, thinned to about `points` samples, with what the navigation display shows."""
+    keep = np.unique(np.linspace(0, len(route['t'])-1, points).astype(int))
+    return {'path': _xyz(route['position'][keep]), 'time_s': _xyz(route['t'][keep]), 'velocity': _xyz(route['velocity'][keep]),
+            'mass_kg': _xyz(route['mass'][keep], 1), 'thrust_n': _xyz(route['thrust'][keep], 0),
+            'link': visibility(terrain, route['position'][keep], earth_az, earth_el).tolist()}
+
+
+def _cell_report(terrain, hazard, x, y):
+    """What the map says about the ground at a point."""
+    row = int(np.clip(round(y/terrain.dy), 0, terrain.z.shape[0]-1))
+    col = int(np.clip(round(x/terrain.dx), 0, terrain.z.shape[1]-1))
+    roughness = float(hazard['roughness'][row, col])
+    return {'x_m': float(x), 'y_m': float(y), 'z_m': float(terrain.z[row, col]), 'hazard': float(hazard['hazard'][row, col]),
+            'slope_deg': float(hazard['slope'][row, col]), 'roughness_m': roughness if np.isfinite(roughness) else None,
+            'eligible': bool(hazard['safe'][row, col])}
+
+
+def _in_view(terrain, x, y, height, azimuth, elevation):
+    """Whether a direction in the sky can be seen from `height` metres above the ground at a point."""
+    z = float(terrain.sample(x, y))+height
+    return int(visibility(terrain, np.array([[x, y, z]]), azimuth, elevation)[0]) == 1
+
+
+def _lat_lon(terrain, x, y):
+    if 'southwest_pixel_center' not in terrain.metadata:
+        return None, None
+    ox, oy = terrain.metadata['southwest_pixel_center']
+    return grid_to_lat_lon(ox+x, oy+y)
+
+
+def _resolved_sky(req, sky):
+    earth_az = sky['earth_az'] if req.earth_az is None else req.earth_az
+    earth_el = sky['earth_el'] if req.earth_el is None else req.earth_el
+    sun_az = sky['sun_az'] if req.sun_az is None else req.sun_az
+    sun_el = sky['sun_el'] if req.sun_el is None else req.sun_el
+    return earth_az, earth_el, sun_az, sun_el
+
+
 Percent = Annotated[float, Field(ge=0, le=100)]
 Azimuth = Annotated[float, Field(ge=0, le=360)]
 Elevation = Annotated[float, Field(ge=-90, le=90)]
@@ -118,6 +163,7 @@ class MissionRequest(BaseModel):
     footprint: float = Field(30., gt=0)
     start_pct: tuple[Percent, Percent] = (15., 50.)
     target_pct: tuple[Percent, Percent] = (75., 50.)
+    target_xy: Optional[tuple[float, float]] = None   # overrides target_pct; metres on the local grid
     altitude: float = Field(350., ge=0)
     duration: float = Field(120., gt=0)
     velocity: tuple[float, float, float] = (4., 0., -3.)
@@ -146,6 +192,34 @@ class RoverRequest(BaseModel):
     start_battery_pct: Percent = 100.
 
 
+class SkyRequest(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    terrain: str = 'synthetic'
+    earth_az: Optional[Azimuth] = None   # None = this terrain's default sky
+    earth_el: Optional[Elevation] = None
+    sun_az: Optional[Azimuth] = None
+    sun_el: Optional[Elevation] = None
+
+
+class PointRequest(SkyRequest):
+    x: float
+    y: float
+
+
+class DivertRequest(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    terrain: str = 'synthetic'
+    position: tuple[float, float, float]
+    velocity: tuple[float, float, float]
+    mass: float = Field(gt=0)
+    remaining_s: float = Field(gt=0)
+    target: tuple[float, float]
+    earth_az: Optional[Azimuth] = None   # None = this terrain's default sky
+    earth_el: Optional[Elevation] = None
+
+
 @app.get('/api/health')
 def health():
     return {'status': 'ok'}
@@ -169,19 +243,117 @@ def _terrain_payload(terrain_id, slope, roughness, footprint):
     raw = json.dumps({'id': terrain_id, 'source': t.source, 'rows': t.z.shape[0], 'cols': t.z.shape[1], 'dx': t.dx, 'dy': t.dy,
                       'z_min': float(np.nanmin(t.z)), 'z_max': float(np.nanmax(t.z)), 'nodata': -9999.,
                       'z': _grid(t.z, 2), 'hazard': _grid(h['hazard'], 3), 'slope': _grid(h['slope'], 2),
-                      'sky': _sky(terrain_id)}, separators=(',', ':')).encode()
+                      'roughness': _grid(h['roughness'], 2), 'origin_xy': t.metadata.get('southwest_pixel_center'),
+                      'slope_limit': slope, 'roughness_limit': roughness, 'sky': _sky(terrain_id)}, separators=(',', ':')).encode()
     return raw, gzip.compress(raw, 6)
+
+
+def _cached_json(request, raw, packed):
+    headers = {'Cache-Control': 'public, max-age=3600', 'Vary': 'Accept-Encoding'}
+    if 'gzip' in request.headers.get('accept-encoding', ''):
+        return Response(packed, media_type='application/json', headers={**headers, 'Content-Encoding': 'gzip'})
+    return Response(raw, media_type='application/json', headers=headers)
 
 
 @app.get('/api/terrain/{terrain_id}')
 def terrain_grids(terrain_id: str, request: Request, slope: float = Query(12., gt=0, le=90),
                   roughness: float = Query(1.5, gt=0), footprint: float = Query(30., gt=0)):
     _terrain(terrain_id)
-    raw, packed = _terrain_payload(terrain_id, slope, roughness, footprint)
-    headers = {'Cache-Control': 'public, max-age=3600', 'Vary': 'Accept-Encoding'}
-    if 'gzip' in request.headers.get('accept-encoding', ''):
-        return Response(packed, media_type='application/json', headers={**headers, 'Content-Encoding': 'gzip'})
-    return Response(raw, media_type='application/json', headers=headers)
+    return _cached_json(request, *_terrain_payload(terrain_id, slope, roughness, footprint))
+
+
+@lru_cache(maxsize=4)
+def _horizon_payload(terrain_id):
+    """The nearest surrounding layer, thinned for drawing the landscape around the crop."""
+    t = _load(terrain_id)
+    if not t.surroundings:
+        raw = json.dumps({'rows': 0, 'cols': 0, 'z': []}).encode()
+    else:
+        ring = t.surroundings[0]
+        stride = max(1, int(np.ceil(max(ring.z.shape)/HORIZON_CELLS)))
+        z = ring.z[::stride, ::stride]
+        raw = json.dumps({'rows': z.shape[0], 'cols': z.shape[1], 'dx': ring.dx*stride, 'dy': ring.dy*stride,
+                          'x0': ring.x0, 'y0': ring.y0, 'nodata': -9999., 'z': _grid(z, 0)}, separators=(',', ':')).encode()
+    return raw, gzip.compress(raw, 6)
+
+
+@app.get('/api/terrain/{terrain_id}/horizon')
+def terrain_horizon(terrain_id: str, request: Request):
+    _terrain(terrain_id)
+    return _cached_json(request, *_horizon_payload(terrain_id))
+
+
+@app.post('/api/sites')
+def landing_sites(req: SkyRequest):
+    """Best places to land, spread across the map, reachable from the start of the default descent."""
+    t = _terrain(req.terrain)
+    sky = _sky(req.terrain)
+    earth_az, earth_el, sun_az, sun_el = _resolved_sky(req, sky)
+    plan = MissionRequest()
+    h = _hazards(req.terrain, plan.slope, plan.roughness, plan.footprint)
+    vehicle = Vehicle(plan.dry_mass, plan.fuel, plan.max_thrust, plan.isp)
+    sx, sy = plan.start_pct[0]/100*t.width, plan.start_pct[1]/100*t.height
+    state = {'position': [[sx, sy, float(t.sample(sx, sy))+plan.altitude]], 'velocity': [plan.velocity],
+             'mass': [plan.dry_mass+plan.fuel], 't': [0., plan.duration]}
+    separation = SITE_SPACING_FRACTION*max(t.width, t.height)
+    options, _ = plan_fallbacks(t, h, state, 0, vehicle, count=SITE_CANDIDATES, limit=SITE_CANDIDATES, separation=separation)
+    sites = []
+    for o in options:
+        earth = _in_view(t, o['x_m'], o['y_m'], LANDER_ANTENNA_M, earth_az, earth_el)
+        sun = _in_view(t, o['x_m'], o['y_m'], LANDER_ANTENNA_M, sun_az, sun_el)
+        lat, lon = _lat_lon(t, o['x_m'], o['y_m'])
+        sites.append({**{k: o[k] for k in ('x_m', 'y_m', 'hazard', 'slope_deg', 'roughness_m', 'fuel_used_kg', 'fuel_remaining_kg')},
+                      'z_m': float(t.sample(o['x_m'], o['y_m'])), 'lat': lat, 'lon': lon, 'earth_visible': earth, 'sunlit': sun,
+                      'score': o['score']+SITE_NO_VIEW_PENALTY*((not earth)+(not sun))})
+    sites.sort(key=lambda s: s['score'])
+    return {'sites': sites[:SITE_COUNT], 'earth': {'azimuth_deg': earth_az, 'elevation_deg': earth_el},
+            'sun': {'azimuth_deg': sun_az, 'elevation_deg': sun_el}}
+
+
+@app.post('/api/point')
+def inspect_point(req: PointRequest):
+    """What a chosen spot looks like: ground conditions, plus whether Earth and the Sun are in view from it."""
+    t = _terrain(req.terrain)
+    if not (0 <= req.x <= t.width and 0 <= req.y <= t.height):
+        raise HTTPException(422, 'That point is outside the map.')
+    earth_az, earth_el, sun_az, sun_el = _resolved_sky(req, _sky(req.terrain))
+    plan = MissionRequest()
+    h = _hazards(req.terrain, plan.slope, plan.roughness, plan.footprint)
+    lat, lon = _lat_lon(t, req.x, req.y)
+    return {**_cell_report(t, h, req.x, req.y), 'lat': lat, 'lon': lon,
+            'earth_visible': _in_view(t, req.x, req.y, LANDER_ANTENNA_M, earth_az, earth_el),
+            'sunlit': _in_view(t, req.x, req.y, LANDER_ANTENNA_M, sun_az, sun_el)}
+
+
+@app.post('/api/divert')
+def divert(req: DivertRequest):
+    """Re-route a descending lander from its current state; picks the cheapest feasible timing."""
+    t = _terrain(req.terrain)
+    if not (0 <= req.target[0] <= t.width and 0 <= req.target[1] <= t.height):
+        raise HTTPException(422, 'That point is outside the map.')
+    sky = _sky(req.terrain)
+    earth_az = sky['earth_az'] if req.earth_az is None else req.earth_az
+    earth_el = sky['earth_el'] if req.earth_el is None else req.earth_el
+    plan = MissionRequest()
+    h = _hazards(req.terrain, plan.slope, plan.roughness, plan.footprint)
+    vehicle = Vehicle(plan.dry_mass, plan.fuel, plan.max_thrust, plan.isp)
+    end = [req.target[0], req.target[1], float(t.sample(*req.target))]
+    if not np.isfinite(end).all():
+        raise HTTPException(422, 'That point has no terrain data.')
+    best, reasons = None, []
+    for factor in (.8, 1., 1.25):
+        try:
+            route = trajectory(t, req.position, req.velocity, end, max(4., req.remaining_s*factor), req.mass, vehicle)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+        if route['feasible'] and (best is None or route['fuel_used'] < best['fuel_used']):
+            best = route
+        reasons = reasons or route['reasons']
+    report = _cell_report(t, h, *req.target)
+    if best is None:
+        return {'feasible': False, 'reasons': reasons, 'target': report}
+    return {'feasible': True, 'reasons': [], 'target': report, 'fuel_used_kg': best['fuel_used'],
+            'touchdown': _xyz(best['position'][-1]), **_route_json(best, 120, t, earth_az, earth_el)}
 
 
 @app.post('/api/mission')
@@ -192,7 +364,9 @@ def mission(req: MissionRequest):
     earth_el = sky['earth_el'] if req.earth_el is None else req.earth_el
     h = _hazards(req.terrain, req.slope, req.roughness, req.footprint)
     sx, sy = req.start_pct[0]/100*t.width, req.start_pct[1]/100*t.height
-    tx, ty = req.target_pct[0]/100*t.width, req.target_pct[1]/100*t.height
+    tx, ty = req.target_xy if req.target_xy else (req.target_pct[0]/100*t.width, req.target_pct[1]/100*t.height)
+    if not (0 <= tx <= t.width and 0 <= ty <= t.height):
+        raise HTTPException(422, 'That landing target is outside the map.')
     start = [sx, sy, float(t.sample(sx, sy))+req.altitude]
     end = [tx, ty, float(t.sample(tx, ty))]
     if not np.isfinite(start+end).all():
@@ -211,22 +385,20 @@ def mission(req: MissionRequest):
     options, diagnostics = ([], {'tested': 0, 'rejected': {}})
     if nominal['feasible']:
         options, diagnostics = plan_fallbacks(t, h, nominal, index, vehicle)
-    shown = np.unique(np.linspace(0, len(nominal['t'])-1, 200).astype(int))
     fallbacks = []
     for rank, o in enumerate(options, 1):
         route = o['route']
-        keep = np.unique(np.linspace(0, len(route['t'])-1, 120).astype(int))
         fallbacks.append({'rank': rank, **{k: o[k] for k in ('x_m', 'y_m', 'hazard', 'slope_deg', 'roughness_m',
                                                              'fuel_used_kg', 'fuel_remaining_kg', 'duration_s', 'score')},
-                          'touchdown': _xyz(route['position'][-1]), 'path': _xyz(route['position'][keep]),
-                          'time_s': _xyz(route['t'][keep])})
+                          'touchdown': _xyz(route['position'][-1]), **_route_json(route, 120, t, earth_az, earth_el)})
     return {
         'terrain_id': req.terrain,
         'eligible_pct': float(100*h['safe'].mean()),
         'earth': {'azimuth_deg': earth_az, 'elevation_deg': earth_el},
+        'target': _cell_report(t, h, tx, ty),
+        'has_dropout': bool(len(blocked)),
         'nominal': {'feasible': nominal['feasible'], 'reasons': nominal['reasons'], 'fuel_used_kg': nominal['fuel_used'],
-                    'peak_thrust_n': nominal['peak_thrust'], 'path': _xyz(nominal['position'][shown]),
-                    'time_s': _xyz(nominal['t'][shown]), 'touchdown': _xyz(nominal['position'][-1])},
+                    'peak_thrust_n': nominal['peak_thrust'], 'touchdown': _xyz(nominal['position'][-1]), **_route_json(nominal, 200, t, earth_az, earth_el)},
         'comms': [{'step': i, 'time_s': float(nominal['t'][s]), 'position': _xyz(nominal['position'][s]),
                    'state': int(c)} for i, (s, c) in enumerate(zip(samples, comms))],
         'outage': {'step': step, 'time_s': float(nominal['t'][index]), 'position': _xyz(nominal['position'][index])},

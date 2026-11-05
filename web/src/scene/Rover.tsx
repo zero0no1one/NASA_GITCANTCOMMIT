@@ -3,18 +3,13 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Line } from '@react-three/drei'
 import * as THREE from 'three'
 import type { RoverTimeline, TerrainGrid } from '../api'
+import { sampleField } from '../coords'
 import { roverAt, useSim } from '../state'
 import { sampleRover } from '../track'
 import { toScene } from './geo'
 
-const SCALE = 14   // drawn larger than life so a ~2 m rover is visible on a kilometre-wide map
-const COMMS = { clear: new THREE.Color('#38bdf8'), blocked: new THREE.Color('#f43f5e'), unknown: new THREE.Color('#a855f7') }
-
-interface Props {
-  grid: TerrainGrid
-  timeline: RoverTimeline
-  exaggeration: number
-}
+const SCALE = 7   // drawn larger than life so a ~2 m rover is visible on a kilometre-wide map
+const LINK = { clear: new THREE.Color('#79b4ff'), blocked: new THREE.Color('#ff7a45'), unknown: new THREE.Color('#b9b5ab') }
 
 function RoverModel() {
   const wheels = [-0.8, 0, 0.8].flatMap((z) => [-0.75, 0.75].map((x) => [x, 0.3, z] as const))
@@ -22,43 +17,50 @@ function RoverModel() {
     <group scale={SCALE}>
       <mesh position={[0, 0.7, 0]} castShadow>
         <boxGeometry args={[1.3, 0.45, 2]} />
-        <meshStandardMaterial color="#e5e7eb" metalness={0.3} roughness={0.5} />
+        <meshStandardMaterial color="#d7d5ce" metalness={0.3} roughness={0.55} />
       </mesh>
-      <mesh position={[0, 0.96, 0.15]}>
-        <boxGeometry args={[1.5, 0.05, 1.5]} />
-        <meshStandardMaterial color="#1e3a8a" metalness={0.6} roughness={0.3} />
+      <mesh position={[0, 0.96, 0.15]} castShadow>
+        <boxGeometry args={[1.55, 0.05, 1.5]} />
+        <meshStandardMaterial color="#17325e" metalness={0.75} roughness={0.25} />
       </mesh>
       <mesh position={[0, 1.4, -0.75]}>
         <cylinderGeometry args={[0.05, 0.05, 0.9]} />
-        <meshStandardMaterial color="#9ca3af" />
+        <meshStandardMaterial color="#9c9a93" />
       </mesh>
       <mesh position={[0, 1.9, -0.75]} rotation={[Math.PI / 3, 0, 0]}>
         <coneGeometry args={[0.3, 0.2, 16, 1, true]} />
-        <meshStandardMaterial color="#f8fafc" side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#efebe1" side={THREE.DoubleSide} />
       </mesh>
-      {/* Forward marker so heading changes are easy to see. */}
-      <mesh position={[0, 0.75, -1.1]} rotation={[-Math.PI / 2, 0, 0]}>
+      {/* Front marker, so heading changes are easy to see from above. */}
+      <mesh position={[0, 0.75, -1.12]} rotation={[-Math.PI / 2, 0, 0]}>
         <coneGeometry args={[0.2, 0.35, 12]} />
-        <meshStandardMaterial color="#f59e0b" emissive="#f59e0b" emissiveIntensity={0.6} />
+        <meshStandardMaterial color="#e3b341" emissive="#e3b341" emissiveIntensity={0.5} />
       </mesh>
       {wheels.map(([x, y, z]) => (
-        <mesh key={`${x},${z}`} position={[x, y, z]} rotation={[0, 0, Math.PI / 2]}>
+        <mesh key={`${x},${z}`} position={[x, y, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
           <cylinderGeometry args={[0.3, 0.3, 0.22, 16]} />
-          <meshStandardMaterial color="#374151" />
+          <meshStandardMaterial color="#2d2c2a" roughness={0.9} />
         </mesh>
       ))}
     </group>
   )
 }
 
+interface Props {
+  grid: TerrainGrid
+  timeline: RoverTimeline
+  exaggeration: number
+}
+
 export function Rover({ grid, timeline, exaggeration }: Props) {
   const body = useRef<THREE.Group>(null)
   const target = useMemo(() => new THREE.Quaternion(), [])
-  const euler = useMemo(() => new THREE.Euler(0, 0, 0, 'YXZ'), [])
+  const matrix = useMemo(() => new THREE.Matrix4(), [])
   const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update: () => void } | null
   const camera = useThree((s) => s.camera)
   const placed = useRef(false)
   const history = useSim((s) => s.history)
+
   const trailPoints = useMemo(() => {
     const point = (x: number, y: number, z: number) => {
       const [a, b, c] = toScene(grid, exaggeration, x, y, z)
@@ -77,9 +79,13 @@ export function Rover({ grid, timeline, exaggeration }: Props) {
       const [sx, sy, sz] = toScene(grid, exaggeration, x, timeline.y[i], timeline.z[i])
       return new THREE.Vector3(sx, sy + 1.5, sz)
     })
-    const colors = timeline.comms.map((c) => (c === 1 ? COMMS.clear : c === 0 ? COMMS.blocked : COMMS.unknown))
+    const colors = timeline.comms.map((c) => (c === 1 ? LINK.clear : c === 0 ? LINK.blocked : LINK.unknown))
     return { points, colors }
   }, [grid, timeline, exaggeration])
+
+  const forward = useMemo(() => new THREE.Vector3(), [])
+  const normal = useMemo(() => new THREE.Vector3(), [])
+  const right = useMemo(() => new THREE.Vector3(), [])
 
   useFrame((_, delta) => {
     const g = body.current
@@ -88,20 +94,27 @@ export function Rover({ grid, timeline, exaggeration }: Props) {
     const s = roverAt(state, state.simTime)
     g.visible = s !== null
     if (!s) return
-    const { follow } = state
     const [x, y, z] = toScene(grid, exaggeration, s.x, s.y, s.z)
     const before = g.position.clone()
     g.position.set(x, y, z)
-    // Heading is clockwise from north (-Z); turn smoothly so re-routes read as a visible steer.
-    euler.set((s.pitch * Math.PI) / 180 * Math.min(exaggeration, 3), (-s.heading * Math.PI) / 180, 0)
-    target.setFromEuler(euler)
+
+    // Sit on the ground: wheels follow the terrain's slope, nose follows the heading (clockwise from north, -Z).
+    const reach = grid.dx * 2
+    const height = (px: number, py: number) => (sampleField(grid, 'z', px, py) ?? s.z) * exaggeration
+    normal.set(height(s.x - reach, s.y) - height(s.x + reach, s.y), 2 * reach, -(height(s.x, s.y - reach) - height(s.x, s.y + reach))).normalize()
+    const h = (s.heading * Math.PI) / 180
+    forward.set(Math.sin(h), 0, -Math.cos(h))
+    right.crossVectors(forward, normal).normalize()
+    forward.crossVectors(normal, right).normalize()
+    matrix.makeBasis(right, normal, forward.clone().negate())
+    target.setFromRotationMatrix(matrix)
     if (!placed.current) {
       g.quaternion.copy(target)
       placed.current = true
     } else {
       g.quaternion.slerp(target, 1 - Math.exp(-delta * 6))
     }
-    if (follow && controls) {
+    if (state.view === 'follow' && controls) {
       const shift = g.position.clone().sub(before)
       if (shift.length() < 200) camera.position.add(shift)
       controls.target.lerp(g.position, 0.2)
@@ -112,13 +125,9 @@ export function Rover({ grid, timeline, exaggeration }: Props) {
   return (
     <group>
       {route.points.length > 1 && <Line points={route.points} vertexColors={route.colors} lineWidth={3} />}
-      {trailPoints.length > 1 && <Line points={trailPoints} color="#cbd5e1" lineWidth={2.5} dashed dashSize={6} gapSize={4} />}
+      {trailPoints.length > 1 && <Line points={trailPoints} color="#e3b341" lineWidth={2} dashed dashSize={6} gapSize={4} />}
       <group ref={body}>
         <RoverModel />
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.5, 0]}>
-          <ringGeometry args={[SCALE * 1.6, SCALE * 2, 40]} />
-          <meshBasicMaterial color="#f59e0b" transparent opacity={0.85} side={THREE.DoubleSide} />
-        </mesh>
       </group>
     </group>
   )

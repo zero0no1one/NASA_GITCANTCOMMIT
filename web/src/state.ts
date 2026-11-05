@@ -1,9 +1,11 @@
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
-import type { Mission, RoverPlan, RoverTimeline, TerrainInfo } from './api'
-import { sampleRover } from './track'
+import type { LandingSite, Mission, RoverPlan, RoverTimeline, TerrainInfo } from './api'
+import { sampleRover, type Divert } from './track'
 
-export type Layer = 'elevation' | 'hazard' | 'slope'
+export type Layer = 'surface' | 'safety' | 'slope' | 'elevation'
+export type CameraView = 'overview' | 'horizon' | 'follow'
+export type Phase = 'plan' | 'descent' | 'drive'
 
 /** A stretch already driven under an earlier plan, from simulation time `start` up to `end`. */
 export interface DrivenLeg {
@@ -23,11 +25,23 @@ interface SimState {
   missionError: string | null
   loading: boolean
 
+  sites: LandingSite[]
+  sitesFor: string | null         // the terrain the current site list belongs to
+  target: [number, number] | null // where the lander is told to land
+  pin: [number, number] | null    // the spot being inspected
+  hover: [number, number] | null  // the spot under the cursor
+  divert: Divert | null
+  divertTo: [number, number] | null // where an in-flight divert is heading; the planned target stays as it was
+  diverting: boolean              // the clock holds while a new route is being worked out
+  notice: string | null           // a short message about the last action, such as a divert that failed
+
   layer: Layer
   exaggeration: number
-  follow: boolean
+  showGrid: boolean
+  view: CameraView
+  viewNonce: number               // bumped to re-run a camera move
 
-  touchdownRank: number           // 0 = nominal touchdown, 1..3 = ranked fallback
+  touchdownRank: number           // 0 = stay on target, 1..3 = switch to this backup when Earth is lost
   goal: [number, number] | null
   roverSpeed: number
   maxSlope: number
@@ -59,11 +73,23 @@ export const useSim = create<SimState>((set) => ({
   missionError: null,
   loading: false,
 
-  layer: 'hazard',
-  exaggeration: 2,
-  follow: false,
+  sites: [],
+  sitesFor: null,
+  target: null,
+  pin: null,
+  hover: null,
+  divert: null,
+  divertTo: null,
+  diverting: false,
+  notice: null,
 
-  touchdownRank: 1,
+  layer: 'surface',
+  exaggeration: 1.5,
+  showGrid: true,
+  view: 'overview',
+  viewNonce: 0,
+
+  touchdownRank: 0,
   goal: null,
   roverSpeed: 0.5,
   maxSlope: 20,
@@ -77,25 +103,31 @@ export const useSim = create<SimState>((set) => ({
   replanning: false,
 
   simTime: 0,
-  playing: true,
-  rate: 20,
+  playing: false,
+  rate: 10,
   runId: 0,
 
   set: (patch) => set(patch),
 }))
 
-/** All state except the clock. simTime changes every frame, so only components that show it should subscribe to it. */
+/** All state except the values that change constantly, so only components that show those re-render with them. */
 export function useSimInputs() {
-  return useSim(useShallow(({ simTime: _clock, ...inputs }) => inputs))
+  return useSim(useShallow(({ simTime: _clock, hover: _hover, ...inputs }) => inputs))
 }
 
-/** Start the run again from the top of the descent. */
+/** Back to the plan: the run waits at the top of the descent until it is started again. */
 export const restartRun = () =>
-  useSim.setState((s) => ({ simTime: 0, plan: null, history: [], playing: true, runId: s.runId + 1, missionEarthEl: s.earthEl }))
+  useSim.setState((s) => ({ simTime: 0, plan: null, history: [], divert: null, divertTo: null, notice: null, playing: false, runId: s.runId + 1, missionEarthEl: s.earthEl }))
 
 /** Where the rover is at a simulation time, including earlier plans; null before it has rolled out. */
 export function roverAt(s: Pick<SimState, 'plan' | 'planStart' | 'history'>, time: number) {
   if (s.plan?.timeline && time >= s.planStart) return sampleRover(s.plan.timeline, time - s.planStart)
   const leg = s.history.find((l) => time >= l.start && time < l.end)
   return leg ? sampleRover(leg.timeline, time - leg.start) : null
+}
+
+/** Which part of the run a simulation time falls in. */
+export function phaseAt(simTime: number, playing: boolean, landing: number): Phase {
+  if (simTime >= landing) return 'drive'
+  return simTime > 0 || playing ? 'descent' : 'plan'
 }

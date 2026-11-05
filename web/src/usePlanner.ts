@@ -1,22 +1,39 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { fetchMission, fetchRover, fetchTerrains } from './api'
+import { fetchMission, fetchRover, fetchSites, fetchTerrains } from './api'
 import { roverAt, useSim, useSimInputs } from './state'
 import { landerTrack } from './track'
 
-/** Loads terrains and missions, and re-plans the rover whenever its inputs change. */
+/** Loads terrain, landing sites and the flight plan, and re-plans the rover whenever its inputs change. */
 export function usePlanner() {
   const s = useSimInputs()
-  const { set, mission, goal, touchdownRank, roverSpeed, maxSlope, sunAz, sunEl, earthEl, runId, terrainId, earthAz, missionEarthEl, outageStep } = s
+  const {
+    set, mission, goal, touchdownRank, roverSpeed, maxSlope, sunAz, sunEl, earthEl, runId, terrainId, earthAz,
+    missionEarthEl, outageStep, target, divert, sitesFor,
+  } = s
 
   useEffect(() => {
     fetchTerrains().then((terrains) => set({ terrains })).catch((e: Error) => set({ missionError: e.message }))
   }, [set])
 
-  const landingEnd = useMemo(() => {
-    if (!mission) return 0
-    const track = landerTrack(mission, touchdownRank)
-    return track.t[track.t.length - 1]
-  }, [mission, touchdownRank])
+  const track = useMemo(() => (mission ? landerTrack(mission, touchdownRank, divert) : null), [mission, touchdownRank, divert])
+  const landingEnd = track ? track.landing : 0
+
+  // Ranked landing sites. They follow the sky, but never move a target that has already been chosen.
+  const siteRequest = useRef(0)
+  useEffect(() => {
+    const id = ++siteRequest.current
+    const timer = setTimeout(() => {
+      fetchSites({ terrain: terrainId, earth_el: earthEl, earth_az: earthAz, sun_az: sunAz, sun_el: sunEl })
+        .then(({ sites }) => {
+          if (id !== siteRequest.current) return
+          const now = useSim.getState()
+          const first = sites[0] ? ([sites[0].x_m, sites[0].y_m] as [number, number]) : null
+          set({ sites, sitesFor: terrainId, ...(now.target ? {} : { target: first, pin: first }) })
+        })
+        .catch((e: Error) => id === siteRequest.current && set({ missionError: e.message, sitesFor: terrainId }))
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [terrainId, earthEl, earthAz, sunAz, sunEl, set])
 
   // Once the rover is driving, the descent is history: moving Earth only re-plans the rover (below).
   useEffect(() => {
@@ -24,40 +41,40 @@ export function usePlanner() {
     if (!now.plan?.timeline || now.simTime < landingEnd) set({ missionEarthEl: earthEl })
   }, [earthEl, landingEnd, set])
 
-  // Lander mission. A new terrain or outage restarts the run; a new Earth position updates it in place.
+  // Flight plan. A new terrain, target or outage goes back to the plan; a new Earth position updates it in place.
   const scenario = useRef('')
   const missionRequest = useRef(0)
   useEffect(() => {
+    if (sitesFor !== terrainId) return
     const id = ++missionRequest.current
     const timer = setTimeout(() => {
       set({ loading: true })
-      fetchMission({ terrain: terrainId, earth_el: missionEarthEl, earth_az: earthAz, outage_step: outageStep })
+      fetchMission({ terrain: terrainId, target_xy: target, earth_el: missionEarthEl, earth_az: earthAz, outage_step: outageStep })
         .then((next) => {
           if (id !== missionRequest.current) return
           const now = useSim.getState()
-          const key = `${terrainId}|${earthAz}|${outageStep}`
+          const key = `${terrainId}|${earthAz}|${outageStep}|${target}`
           const restart = scenario.current !== key
           scenario.current = key
           set({
             mission: next, missionError: null, loading: false,
-            // A later outage can leave fewer fallbacks; never keep pointing at one that no longer exists.
+            // A later outage can leave fewer backups; never keep pointing at one that no longer exists.
             touchdownRank: Math.min(now.touchdownRank, next.fallbacks.length),
-            ...(restart ? { simTime: 0, plan: null, history: [] } : {}),
+            ...(restart ? { simTime: 0, plan: null, history: [], divert: null, divertTo: null, playing: false } : {}),
             ...(now.mission?.terrain.id !== next.terrain.id ? { goal: next.terrain.sky.goal_xy } : {}),
           })
         })
         .catch((e: Error) => id === missionRequest.current && set({ missionError: e.message, loading: false }))
-    }, 250)
+    }, 200)
     return () => clearTimeout(timer)
-  }, [terrainId, missionEarthEl, earthAz, outageStep, set])
+  }, [terrainId, sitesFor, target, missionEarthEl, earthAz, outageStep, set])
 
   // Rover plan: from the touchdown before/at landing, otherwise from wherever the rover is right now.
   const request = useRef(0)
   useEffect(() => {
-    if (!mission || !goal) return
+    if (!mission || !goal || !track) return
     const timer = setTimeout(() => {
       const now = useSim.getState()
-      const track = landerTrack(mission, now.touchdownRank)
       const touchdown = track.p[track.p.length - 1]
       let start: [number, number] = [touchdown[0], touchdown[1]]
       let battery = 100
@@ -95,8 +112,8 @@ export function usePlanner() {
     }, 300)
     return () => clearTimeout(timer)
     // Rover, Sun and Earth settings are read from the store at request time but must still trigger a re-plan.
-  }, [mission, goal, touchdownRank, roverSpeed, maxSlope, sunAz, sunEl, earthEl, landingEnd, runId, set])
+  }, [mission, goal, track, touchdownRank, roverSpeed, maxSlope, sunAz, sunEl, earthEl, landingEnd, runId, set])
 
   const end = Math.max(landingEnd, s.plan?.timeline ? s.planStart + s.plan.timeline.t[s.plan.timeline.t.length - 1] : 0)
-  return { landingEnd, end }
+  return { landingEnd, end, track }
 }

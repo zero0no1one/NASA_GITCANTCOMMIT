@@ -28,7 +28,8 @@ The paper's mass-flow equation (`dm/dt = -T/(Isp·g0)`) is mathematically equiva
 ### Decisions only the team can make
 
 - **Which Space Apps 2026 challenge this answers.** None of the docs name it, and judging is against a specific challenge statement.
-- **Why losing comms matters.** Real landers already fly terminal descent on their own, because Earth is about 1.3 light-seconds away and the final phase is too fast for ground control to steer. A knowledgeable judge will ask why losing comms changes where you land. The draft proposes an answer for the team to accept or change.
+- **What the paper says the project is.** The team now describes the main purpose as mapping coordinates and navigating a vehicle to where the terrain says it can land, and the app is built around that. The paper is still written around comms outages, so its framing needs to change to match. See decision 3 in the draft.
+- **Why losing comms matters.** Real landers already fly terminal descent on their own, because Earth is about 1.3 light-seconds away and the final phase is too fast for ground control to steer. If comms outages stay in the paper as a supporting feature, it still needs a clear reason. The draft proposes one for the team to accept or change.
 - **Author list.** The paper names only Christian.
 - **AI-use disclosure.** Check the current Space Apps rules on disclosing AI-generated code and text.
 
@@ -37,7 +38,6 @@ The paper's mass-flow equation (`dm/dt = -T/(Isp·g0)`) is mathematically equiva
 - **Obsidian frontmatter:** the Plan is missing its opening `---`, and in the Paper a `[[wikilink]]` comes before the frontmatter, so Obsidian ignores both files' properties.
 - **The Plan** still describes the original phases, 8–12 week timeline and A\* requirement. It's fine as history, but the Paper shouldn't be read against it.
 - **Unused code:** `matplotlib` in `requirements.txt`, `io` and `zipfile` imports in `app.py`, `config_dict()` in `trajectory.py`.
-- **Phone layout:** the 3D app breaks at narrow widths; use a laptop for demos.
 
 ## Fixed
 
@@ -55,3 +55,4 @@ The paper's mass-flow equation (`dm/dt = -T/(Isp·g0)`) is mathematically equiva
 | Scoring formula said "available mass" | Corrected to available propellant |
 | Duplicate acceptance checklists | Dashboard checklist in `NASA Project/README.md`; 3D app checks in the root `README.md` |
 | Repository layout left out root files | Updated |
+| Phone layout broken | Redesigned; the app now works from 375 px wide |

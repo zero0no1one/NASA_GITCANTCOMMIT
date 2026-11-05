@@ -32,7 +32,6 @@ export interface TerrainInfo {
 }
 
 export interface TerrainGrid {
-  sky: Sky
   id: string
   source: string
   rows: number
@@ -45,9 +44,44 @@ export interface TerrainGrid {
   z: number[]
   hazard: number[]
   slope: number[]
+  roughness: number[]
+  origin_xy: [number, number] | null
+  slope_limit: number
+  roughness_limit: number
+  sky: Sky
 }
 
-export interface Fallback {
+export interface HorizonGrid {
+  rows: number
+  cols: number
+  dx: number
+  dy: number
+  x0: number
+  y0: number
+  nodata: number
+  z: number[]
+}
+
+export interface FlownRoute {
+  path: Vec3[]
+  time_s: number[]
+  velocity: Vec3[]
+  mass_kg: number[]
+  thrust_n: number[]
+  link: number[]      // line of sight to Earth at each sample: 1 clear, 0 blocked, -1 unknown
+}
+
+export interface CellReport {
+  x_m: number
+  y_m: number
+  z_m: number
+  hazard: number
+  slope_deg: number
+  roughness_m: number | null
+  eligible: boolean
+}
+
+export interface Fallback extends FlownRoute {
   rank: number
   x_m: number
   y_m: number
@@ -59,21 +93,19 @@ export interface Fallback {
   duration_s: number
   score: number
   touchdown: Vec3
-  path: Vec3[]
-  time_s: number[]
 }
 
 export interface Mission {
   terrain: TerrainGrid
   eligible_pct: number
   earth: { azimuth_deg: number; elevation_deg: number }
-  nominal: {
+  target: CellReport
+  has_dropout: boolean
+  nominal: FlownRoute & {
     feasible: boolean
     reasons: string[]
     fuel_used_kg: number
     peak_thrust_n: number
-    path: Vec3[]
-    time_s: number[]
     touchdown: Vec3
   }
   comms: { step: number; time_s: number; position: Vec3; state: number }[]
@@ -83,9 +115,48 @@ export interface Mission {
 
 export interface MissionRequest {
   terrain: string
+  target_xy?: [number, number] | null
   earth_az?: number | null
   earth_el?: number | null
   outage_step?: number | null
+}
+
+export interface LandingSite {
+  x_m: number
+  y_m: number
+  z_m: number
+  hazard: number
+  slope_deg: number
+  roughness_m: number
+  fuel_used_kg: number
+  fuel_remaining_kg: number
+  lat: number | null
+  lon: number | null
+  earth_visible: boolean
+  sunlit: boolean
+  score: number
+}
+
+export interface SkyRequest {
+  terrain: string
+  earth_az?: number | null
+  earth_el?: number | null
+  sun_az?: number | null
+  sun_el?: number | null
+}
+
+export interface PointReport extends CellReport {
+  lat: number | null
+  lon: number | null
+  earth_visible: boolean
+  sunlit: boolean
+}
+
+export interface Diverted extends Partial<FlownRoute> {
+  feasible: boolean
+  reasons: string[]
+  target: CellReport
+  touchdown?: Vec3
 }
 
 export interface RoverTimeline {
@@ -130,7 +201,7 @@ export interface RoverRequest {
   start: [number, number]
   goal: [number, number]
   earth_az?: number | null
-  earth_el?: number
+  earth_el?: number | null
   sun_az?: number | null
   sun_el?: number | null
   max_slope?: number
@@ -152,14 +223,25 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export const fetchTerrains = () => call<TerrainInfo[]>('/api/terrains')
+export const fetchRover = (req: RoverRequest) => call<RoverPlan>('/api/rover', req)
+export const fetchSites = (req: SkyRequest) => call<{ sites: LandingSite[] }>('/api/sites', req)
+export const fetchPoint = (req: SkyRequest & { x: number; y: number }) => call<PointReport>('/api/point', req)
+export const fetchDivert = (req: {
+  terrain: string; position: Vec3; velocity: Vec3; mass: number; remaining_s: number; target: [number, number]; earth_az?: number; earth_el?: number
+}) => call<Diverted>('/api/divert', req)
 
-// Terrain grids are about 98% of the data and never change for a terrain, so each is fetched once.
+// Browsers cache terrain responses, so bump this whenever their contents change shape.
+const TERRAIN_DATA_VERSION = 2
+
+export const fetchHorizon = (id: string) => call<HorizonGrid>(`/api/terrain/${id}/horizon?v=${TERRAIN_DATA_VERSION}`)
+
+// Terrain grids are most of the data and never change for a terrain, so each is fetched once.
 const grids = new Map<string, Promise<TerrainGrid>>()
 
 function fetchGrid(id: string): Promise<TerrainGrid> {
   let grid = grids.get(id)
   if (!grid) {
-    grid = call<TerrainGrid>(`/api/terrain/${id}`)
+    grid = call<TerrainGrid>(`/api/terrain/${id}?v=${TERRAIN_DATA_VERSION}`)
     grids.set(id, grid)
     grid.catch(() => grids.delete(id))
   }
@@ -170,5 +252,3 @@ export async function fetchMission(req: MissionRequest): Promise<Mission> {
   const [mission, terrain] = await Promise.all([call<Omit<Mission, 'terrain'>>('/api/mission', req), fetchGrid(req.terrain)])
   return { ...mission, terrain }
 }
-
-export const fetchRover = (req: RoverRequest) => call<RoverPlan>('/api/rover', req)
