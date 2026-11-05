@@ -1,6 +1,6 @@
 # Contributing to Echo-Path
 
-A short guide so we don't overwrite each other's work before the deadline.
+A short guide so we don't overwrite each other's work.
 
 ## Setup and run
 
@@ -57,3 +57,4 @@ All tests should pass. GitHub runs the same tests on every push and pull request
 | `NASA Project/NASA Space Apps 2026 - Paper.md` | Paper draft |
 | `README.md` | Full project documentation |
 | `FEEDBACK.md` | Open issues with the docs and paper |
+| `LESSONS.md` | What we learned, for future projects |

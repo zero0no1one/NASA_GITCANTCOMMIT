@@ -2,6 +2,8 @@
 
 The first review of the project's docs found that the Plan and Paper describe a system that was never built. This file tracks what has been fixed and what's still open.
 
+Echo-Path is now a separate practice project, not the team's Space Apps 2026 entry, so nothing below blocks a submission. These items only matter if the team keeps developing or publishes Echo-Path.
+
 ## Still open
 
 ### Paper (needs the team)
@@ -27,11 +29,11 @@ The paper's mass-flow equation (`dm/dt = -T/(Isp·g0)`) is mathematically equiva
 
 ### Decisions only the team can make
 
-- **Which Space Apps 2026 challenge this answers.** None of the docs name it, and judging is against a specific challenge statement.
+- **Whether to finish the paper at all.** It was written as a Space Apps paper. If it's kept, it should describe Echo-Path as a separate project.
 - **What the paper says the project is.** The team now describes the main purpose as mapping coordinates and navigating a vehicle to where the terrain says it can land, and the app is built around that. The paper is still written around comms outages, so its framing needs to change to match. See decision 3 in the draft.
 - **Why losing comms matters.** Real landers already fly terminal descent on their own, because Earth is about 1.3 light-seconds away and the final phase is too fast for ground control to steer. If comms outages stay in the paper as a supporting feature, it still needs a clear reason. The draft proposes one for the team to accept or change.
 - **Author list.** The paper names only Christian.
-- **AI-use disclosure.** Check the current Space Apps rules on disclosing AI-generated code and text.
+- **AI-use disclosure.** If the paper is published, say how AI tools were used, following the rules of wherever it's published.
 
 ### Smaller items
 

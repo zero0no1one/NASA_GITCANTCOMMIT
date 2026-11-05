@@ -1,5 +1,7 @@
 # Echo-Path
 
+**Status: a practice project built before NASA Space Apps Challenge 2026. It is not the team's entry.** What we learned from it is in `LESSONS.md`.
+
 **Live demo: https://nasa-gitcantcommit.onrender.com/** (free hosting: it can take about a minute to wake after 15 idle minutes)
 
 Echo-Path is a research prototype that maps coordinates on the Moon and navigates a vehicle to where the terrain says it can land. Using real NASA LOLA elevation data, it reads the ground at any latitude and longitude, recommends safe landing sites, flies a lander there and can divert it mid-flight, and then drives a rover from wherever it touched down. Along the way it tracks what terrain does to the mission: where the line of sight to Earth is lost, what's in shadow, and what fuel and battery remain.
@@ -35,6 +37,7 @@ README.md                  This file
 CONTRIBUTING.md            Team workflow
 DEPLOY.md                  How the live demo is deployed
 FEEDBACK.md                Documentation review and open issues
+LESSONS.md                 What we learned, for future projects
 Dockerfile                 Builds the whole site as one service
 web/                       3D app: Vite, React, TypeScript, Three.js (see web/README.md)
 NASA Project/

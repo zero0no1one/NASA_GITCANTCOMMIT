@@ -25,7 +25,7 @@ The code must be on `main`, with the **tests**, **web** and **container** checks
    | Health check path (under Advanced) | `/api/health` |
 
 5. Click **Deploy Web Service** and wait for the build to finish.
-6. Open the `https://....onrender.com` address it gives you. You should see the lander descending over the terrain.
+6. Open the `https://....onrender.com` address it gives you. You should see the ranked landing sites over the terrain.
 
 ## Updating it
 
@@ -35,7 +35,7 @@ The code must be on `main`, with the **tests**, **web** and **container** checks
 ## Free plan limits
 
 - **It sleeps.** After 15 minutes without visitors the service stops, and the next visitor waits about a minute. **Open the link a couple of minutes before you present.**
-- **It's slow per request.** The free plan has 0.1 CPU. Measured on the live service, a re-route takes about 1 s and a Sun or max-slope change about 2.5 s. The simulation clock waits while the rover re-plans, so nothing jumps.
+- **It's slow per request.** The free plan has 0.1 CPU. Measured on the live service, a rover re-route takes 0.2 s for a short hop and up to about 3 s across the map, and a Sun change about 2.5 s. The simulation clock waits while the rover re-plans, so nothing jumps.
 - **Keep a backup.** Record a demo video in case the service or the venue's internet misbehaves.
 
 ## Run the production build on your own computer
