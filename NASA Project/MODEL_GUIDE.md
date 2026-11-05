@@ -1,5 +1,7 @@
 # Data and model guide
 
+This guide describes this dashboard. The separate 3D app also includes distant horizons, real Sun and Earth limits, and a rover; see the project README.
+
 ## Real-region inputs
 
 Provide a cropped LOLA lunar GeoTIFF, its projection and elevation units, and any scale/offset or nodata documentation. A raw PDS IMG needs its matching LBL and conversion to projected GeoTIFF before import. The app accepts north-up, unrotated, metre-based projected rasters. Geographic degree grids must first be reprojected with the appropriate lunar CRS. The app asks you to confirm that the source is lunar; projected Earth data are not a substitute.
@@ -10,7 +12,7 @@ Local coordinates use projected grid north, which can differ from geographic nor
 
 ## Terrain and illumination
 
-Slope uses metre-scaled gradients. Roughness is RMS departure from a local fitted plane across an odd-sized neighbourhood at least three cells wide. Optional Sun raycasting excludes shaded or unknown sites. Thresholds are absolute, not terrain percentiles. Landing eligibility requires slope and roughness below their limits throughout the landing footprint; hazard ranks the remaining sites.
+Slope uses metre-scaled gradients. Roughness is RMS departure from a local fitted plane across an odd-sized neighbourhood at least three cells wide. Optional Sun raycasting excludes shaded or unknown sites. Thresholds are absolute, not terrain percentiles. Landing eligibility requires slope and roughness below their limits throughout the landing footprint; hazard ranks the remaining sites, as 0.65 × slope/limit + 0.35 × roughness/limit, clipped to 0–1, with ineligible cells set to 1.
 
 ## Dynamics and routing
 

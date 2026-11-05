@@ -83,6 +83,8 @@ To plan a rover drive:
 python -m echo_path.rover --dem data/lola_site20_r1560_c1320.tif --surround data/lola_site20_surround_40m.tif --surround data/lola_south_pole_surround_640m.tif --goal 180 1020
 ```
 
+This gives 836 m in about 39 minutes over 5 legs, with Earth blocked 44% of the time and shadow 24%. A straight line between the same points takes 40.6 minutes, with Earth blocked 48% of the time and shadow 22%. Almost no cells on this gentle plateau exceed the rover's limits, so it doesn't exercise obstacle avoidance.
+
 ## Loading it in the dashboards
 
 - **3D app:** this terrain is the default.

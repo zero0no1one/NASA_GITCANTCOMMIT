@@ -30,7 +30,7 @@ Requires Python 3.11+ and the packages in requirements.txt. Verified locally wit
 
 ## Needed data
 
-Real LOLA data are not bundled. Keep the download's projection, vertical-unit, scale/offset and nodata documentation; retain the accompanying LBL if downloading raw PDS IMG. The current importer expects a north-up projected lunar GeoTIFF with horizontal metres. See MODEL_GUIDE.md for model assumptions and optional vehicle/geometry inputs.
+Real LOLA crops are in `data/`, with sources and loading steps in `data/README.md`. For your own DEMs, keep the download's projection, vertical-unit, scale/offset and nodata documentation; retain the accompanying LBL if downloading raw PDS IMG. The importer expects a north-up projected lunar GeoTIFF with horizontal metres. See MODEL_GUIDE.md for model assumptions and optional vehicle/geometry inputs.
 
 ## Automated verification
 
@@ -38,7 +38,7 @@ Real LOLA data are not bundled. Keep the download's projection, vertical-unit, s
 python -m unittest discover -s tests -v
 ```
 
-Engine tests cover known slope/roughness, nodata, occlusion, analytic hover fuel, thrust/fuel/collision rejection, state-continuous fallbacks and GeoTIFF metadata. Dashboard tests exercise default results, batch computation, parameter changes, coverage invalidation, illumination controls and invalid paths.
+Install `api/requirements.txt` first if you want to run all of them, since the API tests need FastAPI. Engine tests cover known slope/roughness, nodata, occlusion, analytic hover fuel, thrust/fuel/collision rejection, state-continuous fallbacks and GeoTIFF metadata. Dashboard tests exercise default results, batch computation, parameter changes, coverage invalidation, illumination controls and invalid paths. Other tests cover the rover, distant horizons, the API and the bundled data.
 
 ## Layout
 
@@ -47,6 +47,9 @@ Engine tests cover known slope/roughness, nodata, occlusion, analytic hover fuel
 - echo_path/comms.py: terrain raycasting and illumination.
 - echo_path/trajectory.py: polynomial point-mass guidance and feasibility checks.
 - echo_path/routing.py: candidate search and ranking from outage state.
+- echo_path/rover.py, astro.py, evaluation.py: rover planning, Sun and Earth limits, and the paper's results table.
+- api/: server for the 3D app in `web/`.
+- data/: real LOLA terrain and its sources.
 - MODEL_GUIDE.md: data contract, equations, limits and reference sources.
 
-Results are sampled prototype feasibility checks, not operational flight plans. Real lunar-data validation remains pending your DEM download.
+This file covers the Streamlit dashboard. See the README at the repository root for the whole project and the 3D app. Results are sampled prototype feasibility checks, not operational flight plans.
