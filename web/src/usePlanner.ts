@@ -47,8 +47,9 @@ export function usePlanner() {
   useEffect(() => {
     if (sitesFor !== terrainId) return
     const id = ++missionRequest.current
+    // Marked straight away, not after the debounce: a run started on the outgoing plan would be cancelled by the new one.
+    set({ loading: true })
     const timer = setTimeout(() => {
-      set({ loading: true })
       fetchMission({ terrain: terrainId, target_xy: target, earth_el: missionEarthEl, earth_az: earthAz, outage_step: outageStep })
         .then((next) => {
           if (id !== missionRequest.current) return

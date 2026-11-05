@@ -5,8 +5,10 @@ import { useSimInputs, type Phase } from '../state'
 
 /** The chosen spot, and the one action that makes sense for it in this phase. */
 export function SpotPanel({ mission, phase, onAct }: { mission: Mission; phase: Phase; onAct: (x: number, y: number) => void }) {
-  const { pin, target, divertTo, goal, earthEl, sunAz, sunEl, set } = useSimInputs()
+  const { pin: chosenSpot, target, divertTo, goal, earthEl, sunAz, sunEl, terrainId, set } = useSimInputs()
   const grid = mission.terrain
+  // A spot on a map that's still loading can't be read against the grid of the previous one.
+  const pin = grid.id === terrainId ? chosenSpot : null
   const [report, setReport] = useState<PointReport | null>(null)
   const [lat, setLat] = useState('')
   const [lon, setLon] = useState('')

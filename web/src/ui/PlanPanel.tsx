@@ -26,36 +26,44 @@ function SiteRow({ site, rank, mission, chosen, onChoose }: {
 
 /** Before flight: where the terrain says to land, and what happens if contact is lost on the way. */
 export function PlanPanel({ mission, onChooseSite }: { mission: Mission; onChooseSite: (site: LandingSite) => void }) {
-  const { sites, target, touchdownRank, outageStep, set } = useSimInputs()
+  const { sites, sitesFor, terrainId, loading, target, touchdownRank, outageStep, set } = useSimInputs()
   const { nominal, target: spot, comms, outage, fallbacks, has_dropout: hasDropout } = mission
   const flyable = nominal.feasible
+  // Just after switching maps, the sites and the flight plan on hand can still belong to the previous one.
+  const mapReady = sitesFor === terrainId && mission.terrain.id === terrainId
   const chosen = (s: LandingSite) => target !== null && Math.hypot(target[0] - s.x_m, target[1] - s.y_m) < 1
 
   return (
     <section className="panel" aria-label="Plan the landing">
       <h2>Where to land</h2>
       <p className="lead">Ranked by how flat and smooth the ground is and the fuel to reach it. Choose one, or click anywhere on the Moon.</p>
-      <ol className="sites">
-        {sites.map((site, i) => (
-          <SiteRow key={`${site.x_m},${site.y_m}`} site={site} rank={i + 1} mission={mission} chosen={chosen(site)} onChoose={() => onChooseSite(site)} />
-        ))}
-      </ol>
-      {sites.length === 0 && <p className="note warn">No site on this map passes the landing limits. Click the Moon to pick a spot yourself.</p>}
+      {mapReady ? (
+        <ol className="sites">
+          {sites.map((site, i) => (
+            <SiteRow key={`${site.x_m},${site.y_m}`} site={site} rank={i + 1} mission={mission} chosen={chosen(site)} onChoose={() => onChooseSite(site)} />
+          ))}
+        </ol>
+      ) : (
+        <p className="note">Finding landing sites on this map…</p>
+      )}
+      {mapReady && sites.length === 0 && <p className="note warn">No site on this map passes the landing limits. Click the Moon to pick a spot yourself.</p>}
 
-      {!spot.eligible && (
+      {mapReady && !spot.eligible && (
         <p className="note warn">
           This target fails the landing limits ({spot.slope_deg.toFixed(1)}° slope). The lander can fly there, but it isn't a safe place to land.
         </p>
       )}
-      {!flyable && (
+      {mapReady && !flyable && (
         <p className="note warn">The lander can't reach this target: {nominal.reasons.join(', ').toLowerCase()}. Choose another spot.</p>
       )}
-      <button type="button" className="primary" disabled={!flyable} onClick={() => useSim.setState({ playing: true })}>
+      <button type="button" className="primary" disabled={!flyable || !mapReady || loading} onClick={() => useSim.setState({ playing: true })}>
         Begin descent
       </button>
-      <p className="note">
-        {hasDropout ? `Earth drops out of view at T+${formatClock(outage.time_s)} on this route.` : 'Earth stays in view for the whole descent.'}
-      </p>
+      {mapReady && (
+        <p className="note">
+          {hasDropout ? `Earth drops out of view at T+${formatClock(outage.time_s)} on this route.` : 'Earth stays in view for the whole descent.'}
+        </p>
+      )}
 
       <details className="fold">
         <summary>Plan for losing contact</summary>

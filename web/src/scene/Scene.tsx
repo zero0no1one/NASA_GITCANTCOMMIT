@@ -160,8 +160,10 @@ interface Props {
 }
 
 export function Scene({ mission, track, end, landingEnd, phase, onChooseSite, onClickGround }: Props) {
-  const { layer, exaggeration, plan, goal, sunAz, sunEl, earthEl, target, divertTo, pin, sites, showGrid } = useSimInputs()
+  const { layer, exaggeration, plan, goal, sunAz, sunEl, earthEl, target, divertTo, pin, sites, showGrid, terrainId } = useSimInputs()
   const grid = mission.terrain
+  // Just after switching maps, the sites and spots on hand belong to the map that's still loading.
+  const mapReady = grid.id === terrainId
   const width = (grid.cols - 1) * grid.dx
   const height = (grid.rows - 1) * grid.dy
   const span = Math.max(width, height)
@@ -215,9 +217,9 @@ export function Scene({ mission, track, end, landingEnd, phase, onChooseSite, on
       {horizon && horizon.rows > 0 && <Horizon grid={grid} horizon={horizon} exaggeration={exaggeration} />}
       <Terrain grid={grid} layer={layer} exaggeration={exaggeration} />
       {showGrid && <Graticule grid={grid} exaggeration={exaggeration} />}
-      {phase === 'plan' && <SiteFlags grid={grid} exaggeration={exaggeration} sites={sites} onPick={onChooseSite} />}
-      {(divertTo ?? target) && <GroundMark grid={grid} exaggeration={exaggeration} at={(divertTo ?? target)!} color="#e3b341" scale={1.3} />}
-      {pin && <GroundMark grid={grid} exaggeration={exaggeration} at={pin} color="#efebe1" />}
+      {mapReady && phase === 'plan' && <SiteFlags grid={grid} exaggeration={exaggeration} sites={sites} onPick={onChooseSite} />}
+      {mapReady && (divertTo ?? target) && <GroundMark grid={grid} exaggeration={exaggeration} at={(divertTo ?? target)!} color="#e3b341" scale={1.3} />}
+      {mapReady && pin && <GroundMark grid={grid} exaggeration={exaggeration} at={pin} color="#efebe1" />}
       {goal && phase === 'drive' && <GroundMark grid={grid} exaggeration={exaggeration} at={goal} color="#79b4ff" scale={1.3} />}
       <HoverReticle grid={grid} exaggeration={exaggeration} />
       <Lander mission={mission} track={track} exaggeration={exaggeration} />
