@@ -1,12 +1,35 @@
+import tempfile
 import unittest
+from pathlib import Path
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from api.main import app
+from api.main import app, mount_web
 
 
 class ApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.client = TestClient(app)
+
+    def test_health_check(self):
+        self.assertEqual(self.client.get('/api/health').json(), {'status': 'ok'})
+
+    def test_large_responses_are_compressed(self):
+        r = self.client.post('/api/mission', json={'terrain': 'lola_site20'}, headers={'Accept-Encoding': 'gzip'})
+        self.assertEqual(r.headers.get('content-encoding'), 'gzip')
+
+    def test_built_web_app_is_served_alongside_the_api(self):
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, 'index.html').write_text('<title>Echo-Path 3D</title>', encoding='utf-8')
+            site = FastAPI()
+            site.get('/api/health')(lambda: {'status': 'ok'})
+            mount_web(site, folder)
+            client = TestClient(site)
+            self.assertIn('Echo-Path 3D', client.get('/').text)
+            self.assertEqual(client.get('/api/health').json(), {'status': 'ok'})
+        empty = FastAPI()
+        mount_web(empty, Path(folder, 'missing'))
+        self.assertEqual(TestClient(empty).get('/').status_code, 404)
 
     def test_terrains_report_real_sky_limits(self):
         r = self.client.get('/api/terrains')

@@ -14,6 +14,9 @@ from .astro import site_of, sky_limits
 from .comms import visibility, shadow_map
 
 
+SHADOW_STRIDE = 4
+
+
 @dataclass(frozen=True)
 class Rover:
     max_slope: float = 20.
@@ -39,7 +42,8 @@ def traversability(terrain, rover, sun_az=None, sun_el=None):
     cost = 1 + 2*slope/rover.max_slope + np.nan_to_num(rough)/rover.max_roughness
     shadowed = np.zeros(terrain.z.shape, bool)
     if sun_el is not None:
-        shadowed = shadow_map(terrain, sun_az, sun_el) != 1
+        # Only steers the route; the sunlight reported along the drive is ray-cast at every point.
+        shadowed = shadow_map(terrain, sun_az, sun_el, stride=SHADOW_STRIDE) != 1
         cost = cost + rover.shadow_penalty*shadowed
     cost[blocked] = np.inf
     return {'cost': cost, 'blocked': blocked, 'slope': slope, 'shadowed': shadowed}

@@ -1,0 +1,9 @@
+**
+!web/
+!NASA Project/api/
+!NASA Project/echo_path/
+!NASA Project/data/
+web/node_modules
+web/dist
+**/__pycache__
+**/*.pyc

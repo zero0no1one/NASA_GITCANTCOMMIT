@@ -31,12 +31,16 @@ export default function App() {
       <main>
         <div className="viewport">
           {mission ? <Scene mission={mission} end={end} /> : (
-            <div className="placeholder">{missionError ? '' : 'Loading terrain…'}</div>
+            <div className="placeholder">{missionError ? '' : 'Loading lunar terrain… on the free server this can take a minute after it has been idle.'}</div>
           )}
           {mission && <Hud mission={mission} landingEnd={landingEnd} />}
           <div className="banners">
             {loading && mission && <div className="banner">Updating mission…</div>}
-            {missionError && <div className="banner bad">API: {missionError}. Is the Python API running on port 8000?</div>}
+            {missionError && (
+              <div className="banner bad">
+                Server: {missionError}. {import.meta.env.DEV ? 'Is the Python API running on port 8000?' : 'Please reload in a moment.'}
+              </div>
+            )}
             {mission && !mission.nominal.feasible && (
               <div className="banner bad">Nominal descent fails: {mission.nominal.reasons.join('; ')}</div>
             )}

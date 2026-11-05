@@ -55,12 +55,18 @@ def visibility(terrain, points, azimuth_deg=270., elevation_deg=3., surroundings
     return np.where(blocked, 0, np.where(unknown, -1, 1))
 
 
-def shadow_map(terrain, azimuth, elevation, far_stride=8):
-    """Sunlight per cell. Distant horizons change slowly across a crop, so they are checked every far_stride cells."""
-    y, x = np.indices(terrain.z.shape)
-    points = np.column_stack((x.ravel()*terrain.dx, y.ravel()*terrain.dy, terrain.z.ravel()+.1))
+def shadow_map(terrain, azimuth, elevation, far_stride=8, stride=1):
+    """Sunlight per cell. Distant horizons change slowly across a crop, so they are checked every far_stride cells.
+
+    stride > 1 casts rays from every stride-th cell and repeats the result: much faster, and
+    enough to steer a route, but use the default wherever exact per-cell eligibility matters.
+    """
+    rows, cols = np.arange(0, terrain.z.shape[0], stride), np.arange(0, terrain.z.shape[1], stride)
+    y, x = np.meshgrid(rows, cols, indexing='ij')
+    points = np.column_stack((x.ravel()*terrain.dx, y.ravel()*terrain.dy, terrain.z[y, x].ravel()+.1))
     chunks = [visibility(terrain, points[i:i+250], azimuth, elevation, surroundings=False) for i in range(0, len(points), 250)]
-    light = np.concatenate(chunks).reshape(terrain.z.shape)
+    light = np.concatenate(chunks).reshape(y.shape)
+    light = np.repeat(np.repeat(light, stride, 0), stride, 1)[:terrain.z.shape[0], :terrain.z.shape[1]]
     if terrain.surroundings and 0 < elevation < 89.99:
         rows, cols = np.arange(0, terrain.z.shape[0], far_stride), np.arange(0, terrain.z.shape[1], far_stride)
         rr, cc = np.meshgrid(rows, cols, indexing='ij')
