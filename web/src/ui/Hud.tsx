@@ -38,16 +38,18 @@ export function Hud({ mission, landingEnd }: { mission: Mission; landingEnd: num
   }
   const r = sampleRover(tl, simTime - planStart)
   const [comms, tone] = COMMS_LABEL[r.comms] ?? COMMS_LABEL[-1]
+  const mapOnly = mission.terrain.sky.horizon_km === 0
+  const phase = !r.done ? 'Rover traverse' : plan?.reached_goal === false ? 'Rover stopped: battery empty' : 'Rover at goal'
   return (
     <div className="hud">
-      <div className="hud-phase">{r.done ? 'Rover at goal' : 'Rover traverse'}{replanning ? ' · re-routing…' : ''}</div>
+      <div className="hud-phase">{phase}{replanning ? ' · re-routing…' : ''}</div>
       <Row label="Mission time" value={`T+${formatClock(simTime)}`} />
       <Row label="Drive time" value={formatClock(simTime - landingEnd)} />
       <Row label="Speed" value={`${r.speed.toFixed(2)} m/s`} />
       <Row label="Heading" value={`${r.heading.toFixed(0).padStart(3, '0')}° ${compass(r.heading)}`} />
       <Row label="Battery" value={`${r.battery.toFixed(1)} %`} tone={r.battery < 20 ? 'bad' : r.battery < 50 ? 'warn' : 'ok'} />
-      <Row label="Earth comms" value={comms} tone={tone} />
-      <Row label="Sunlight" value={r.sunlit ? 'Sunlit' : 'Shadow'} tone={r.sunlit ? 'ok' : 'warn'} />
+      <Row label="Earth comms" value={r.comms === 1 && mapOnly ? 'Clear (map only)' : comms} tone={tone} />
+      <Row label="Sunlight" value={!r.sunlit ? 'Shadow' : mapOnly ? 'Sunlit (map only)' : 'Sunlit'} tone={r.sunlit ? 'ok' : 'warn'} />
     </div>
   )
 }

@@ -62,6 +62,7 @@ input[type='range'] { width: 100%; accent-color: var(--accent); }
 .seg button { flex: 1; padding: 5px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; text-transform: capitalize; }
 .seg button.on { border-color: var(--accent); color: var(--accent); }
 .note { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.note.warn { color: var(--warn); }
 .check { display: flex; gap: 8px; align-items: center; color: var(--muted); }
 
 .timeline { border-top: 1px solid var(--line); background: var(--panel); padding: 8px 16px 10px; max-height: 38vh; overflow-y: auto; }

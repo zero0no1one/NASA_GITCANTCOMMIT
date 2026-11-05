@@ -25,7 +25,7 @@ export function usePlanner() {
           const fresh = useSim.getState().mission?.terrain.id !== t.id
           set({
             mission, missionError: null, loading: false, simTime: 0, plan: null, trail: [],
-            ...(fresh ? { goal: [0.85 * (t.cols - 1) * t.dx, 0.85 * (t.rows - 1) * t.dy] as [number, number] } : {}),
+            ...(fresh ? { goal: t.sky.goal_xy } : {}),
           })
         })
         .catch((e: Error) => live && set({ missionError: e.message, loading: false }))
@@ -73,8 +73,9 @@ export function usePlanner() {
       const id = ++request.current
       set({ replanning: true })
       fetchRover({
-        terrain: mission.terrain.id, start, goal, earth_az: mission.earth.azimuth_deg, earth_el: now.earthEl,
-        sun_az: now.sunAz, sun_el: now.sunEl, max_slope: now.maxSlope, speed: now.roverSpeed,
+        terrain: mission.terrain.id, start, goal, earth_az: mission.earth.azimuth_deg, earth_el: mission.earth.elevation_deg,
+        sun_az: now.sunAz ?? mission.terrain.sky.sun_az, sun_el: now.sunEl ?? mission.terrain.sky.sun_el,
+        max_slope: now.maxSlope, speed: now.roverSpeed,
         start_battery_pct: Math.max(0, Math.min(100, battery)),
       })
         .then((plan) => {

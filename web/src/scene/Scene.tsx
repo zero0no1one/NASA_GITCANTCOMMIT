@@ -18,13 +18,14 @@ function Clock({ end }: { end: number }) {
 }
 
 export function Scene({ mission, end }: { mission: Mission; end: number }) {
-  const { layer, exaggeration, touchdownRank, plan, goal, sunAz, sunEl, earthEl, set } = useSim()
+  const { layer, exaggeration, touchdownRank, plan, goal, sunAz, sunEl, set } = useSim()
   const grid = mission.terrain
   const width = (grid.cols - 1) * grid.dx
   const height = (grid.rows - 1) * grid.dy
   const span = Math.max(width, height)
-  const sun = direction(sunAz, Math.max(sunEl, 1))
-  const earth = direction(mission.earth.azimuth_deg, earthEl)
+  const sunElevation = sunEl ?? grid.sky.sun_el
+  const sun = direction(sunAz ?? grid.sky.sun_az, Math.max(sunElevation, 1))
+  const earth = direction(mission.earth.azimuth_deg, mission.earth.elevation_deg)
   const centre = toScene(grid, exaggeration, width / 2, height / 2, (grid.z_min + grid.z_max) / 2)
   const goalPos = goal && toScene(grid, exaggeration, goal[0], goal[1], grid.z_max)
 
@@ -33,7 +34,7 @@ export function Scene({ mission, end }: { mission: Mission; end: number }) {
       <color attach="background" args={['#05070d']} />
       <Stars radius={span * 4} depth={span} count={3000} factor={span / 60} fade />
       <ambientLight intensity={0.25} />
-      <directionalLight position={[sun[0] * span, sun[1] * span, sun[2] * span]} intensity={sunEl > 0 ? 2.2 : 0.3} />
+      <directionalLight position={[sun[0] * span, sun[1] * span, sun[2] * span]} intensity={sunElevation > 0 ? 2.2 : 0.3} />
       <hemisphereLight args={['#c7d2fe', '#111827', 0.25]} />
       <Terrain grid={grid} layer={layer} exaggeration={exaggeration} onPick={(x, y) => set({ goal: [x, y] })} />
       <LanderScene mission={mission} exaggeration={exaggeration} rank={touchdownRank} />

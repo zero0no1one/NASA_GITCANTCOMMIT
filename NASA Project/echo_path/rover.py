@@ -9,7 +9,8 @@ import heapq
 from dataclasses import dataclass
 import numpy as np
 from scipy.ndimage import map_coordinates
-from .terrain import synthetic, load_dem, hazards
+from .terrain import synthetic, load_dem, load_surround, hazards
+from .astro import site_of, sky_limits
 from .comms import visibility, shadow_map
 
 
@@ -84,20 +85,24 @@ def astar(cost, start, goal, dx=1., dy=1.):
     return path[::-1]
 
 
-def _clear_line(blocked, a, b):
+def line_cost(cost, a, b, dx=1., dy=1.):
+    """Cost of driving straight between two cells, on the same scale as astar(); inf if it crosses a blocked cell."""
     n = int(max(abs(b[0]-a[0]), abs(b[1]-a[1])))*2+1
-    rr = np.rint(np.linspace(a[0], b[0], n)).astype(int)
-    cc = np.rint(np.linspace(a[1], b[1], n)).astype(int)
-    return not blocked[rr, cc].any()
+    if n < 2: return 0.
+    values = cost[np.rint(np.linspace(a[0], b[0], n)).astype(int), np.rint(np.linspace(a[1], b[1], n)).astype(int)]
+    return float(np.hypot((b[0]-a[0])*dy, (b[1]-a[1])*dx)*(values[:-1]+values[1:]).sum()/(2*(n-1)))
 
 
-def smooth(path, blocked):
-    """Drop grid zig-zags: keep only the corners needed to stay off blocked cells."""
+def smooth(path, cost, dx=1., dy=1.):
+    """Drop grid zig-zags: take a straight shortcut only where it costs no more than the A* route it replaces."""
     if len(path) < 3: return list(path)
+    # Same step formula as astar(), so the running total stays finite even beside blocked cells.
+    steps = [np.hypot((b[0]-a[0])*dy, (b[1]-a[1])*dx)*(cost[a]+cost[b])/2 for a, b in zip(path[:-1], path[1:])]
+    along = np.concatenate(([0.], np.cumsum(steps)))
     out, i = [path[0]], 0
     while i < len(path)-1:
         j = len(path)-1
-        while j > i+1 and not _clear_line(blocked, path[i], path[j]): j -= 1
+        while j > i+1 and line_cost(cost, path[i], path[j], dx, dy) > along[j]-along[i]: j -= 1
         out.append(path[j])
         i = j
     return out
@@ -128,19 +133,28 @@ def drive(terrain, corners, grid, rover, earth_az, earth_el, sun_az=None, sun_el
     else:
         sunlit = visibility(terrain, np.column_stack((pts, z+rover.panel_height)), sun_az, sun_el) == 1
     net_w = rover.drive_w+rover.idle_w-rover.solar_w*sunlit[:-1]
-    battery = rover.start_battery_pct - np.concatenate(([0.], np.cumsum(net_w*dt/3600)))*100/rover.battery_wh
-    battery = np.minimum(battery, 100.)
-    depleted = np.flatnonzero(battery <= 0)
-    battery = np.maximum(battery, 0.)
+    # Integrate step by step: charge above full is lost, and the rover stops when the battery empties.
+    battery, stop = np.full(len(pts), float(rover.start_battery_pct)), None
+    for i, used in enumerate(net_w*dt/3600*100/rover.battery_wh):
+        level = min(100., battery[i]-used)
+        if level <= 0:
+            stop = i if battery[i] <= 0 else i+1
+            battery[i+1] = 0.
+            break
+        battery[i+1] = level
+    keep = len(pts) if stop is None else stop+1
     heading = np.append(heading, heading[-1] if len(heading) else 0.)
     pitch = np.append(pitch, pitch[-1] if len(pitch) else 0.)
     timeline = {'t': t, 'x': pts[:, 0], 'y': pts[:, 1], 'z': z, 'heading_deg': heading, 'pitch_deg': pitch,
                 'speed_m_s': speed, 'comms': comms, 'sunlit': sunlit, 'battery_pct': battery}
+    timeline = {key: values[:keep] for key, values in timeline.items()}
     segments = []
     for a, b in zip(bounds[:-1], bounds[1:]):
+        if a >= keep-1: break
+        b = min(b, keep-1)
         segments.append({'start_s': float(t[a]), 'end_s': float(t[b]), 'length_m': float(seg_len[a:b].sum()),
                          'heading_deg': float(heading[a]), 'mean_speed_m_s': float(seg_len[a:b].sum()/max(t[b]-t[a], 1e-9))})
-    return timeline, segments, (float(t[depleted[0]]) if len(depleted) else None)
+    return timeline, segments, (None if stop is None else float(t[stop]))
 
 
 def _round(timeline):
@@ -156,6 +170,8 @@ def _round(timeline):
 def plan_rover(terrain, start_xy, goal_xy, rover=None, earth_az=270., earth_el=3., sun_az=None, sun_el=None, grid=None):
     """Plan and time a traverse. Pass a precomputed traversability `grid` to skip recomputing it."""
     rover = rover or Rover()
+    if min(rover.speed, rover.max_slope, rover.max_roughness, rover.battery_wh) <= 0 or not 0 < rover.min_speed_frac <= 1:
+        raise ValueError('Rover speed, limits and battery capacity must be positive, and the speed floor between 0 and 1.')
     grid = grid or traversability(terrain, rover, sun_az, sun_el)
     rows, cols = terrain.z.shape
 
@@ -171,7 +187,7 @@ def plan_rover(terrain, start_xy, goal_xy, rover=None, earth_az=270., earth_el=3
     path = astar(grid['cost'], start, goal, terrain.dx, terrain.dy)
     if path is None:
         return {'feasible': False, 'reason': 'No traversable route between start and goal.'}
-    corners = smooth(path, grid['blocked'])
+    corners = smooth(path, grid['cost'], terrain.dx, terrain.dy)
     if len(corners) == 1:
         corners = corners*2
     timeline, segments, depleted_at = drive(terrain, corners, grid, rover, earth_az, earth_el, sun_az, sun_el)
@@ -182,8 +198,8 @@ def plan_rover(terrain, start_xy, goal_xy, rover=None, earth_az=270., earth_el=3
                'min_battery_pct': float(timeline['battery_pct'].min()), 'end_battery_pct': float(timeline['battery_pct'][-1]),
                'comms_blocked_pct': share(timeline['comms'] != 1), 'shadow_pct': share(~timeline['sunlit']),
                'grid_steps': len(path), 'corners': len(corners)}
-    reason = None if depleted_at is None else f'Battery depleted at {depleted_at:.0f} s.'
-    return {'feasible': depleted_at is None, 'reason': reason, 'summary': summary,
+    reason = None if depleted_at is None else f'Battery depleted at {depleted_at:.0f} s; the rover stopped short of the goal.'
+    return {'feasible': depleted_at is None, 'reached_goal': depleted_at is None, 'reason': reason, 'summary': summary,
             'segments': segments, 'timeline': _round(timeline)}
 
 
@@ -193,15 +209,24 @@ def main(argv=None):
     parser.add_argument('--size', type=int, default=240)
     parser.add_argument('--start', type=float, nargs=2, metavar=('X', 'Y'), help='Start in metres (default: 75%%, 50%% of the tile)')
     parser.add_argument('--goal', type=float, nargs=2, metavar=('X', 'Y'), help='Goal in metres (default: 90%%, 90%% of the tile)')
-    parser.add_argument('--earth-az', type=float, default=270.)
-    parser.add_argument('--earth-el', type=float, default=3.)
+    parser.add_argument('--surround', action='append', default=[], metavar='PATH',
+                        help='Coarser DEM for distant horizons, finest first; repeatable. Earth and Sun then default to real values for the site')
+    parser.add_argument('--earth-az', type=float)
+    parser.add_argument('--earth-el', type=float)
     parser.add_argument('--sun-az', type=float, default=90.)
-    parser.add_argument('--sun-el', type=float, default=5.)
+    parser.add_argument('--sun-el', type=float)
     args = parser.parse_args(argv)
     terrain = load_dem(args.dem, size=args.size) if args.dem else synthetic()
+    terrain.surroundings = [load_surround(path, terrain) for path in args.surround]
+    earth_az, earth_el, sun_el = 270., 3., 5.
+    if terrain.surroundings:
+        sky = sky_limits(*site_of(terrain))
+        earth_az, earth_el, sun_el = sky['earth']['mean_az'] % 360, sky['earth']['mean_el'], .8*sky['sun']['el_max']
     start = args.start or (.75*terrain.width, .5*terrain.height)
     goal = args.goal or (.9*terrain.width, .9*terrain.height)
-    r = plan_rover(terrain, start, goal, earth_az=args.earth_az, earth_el=args.earth_el, sun_az=args.sun_az, sun_el=args.sun_el)
+    r = plan_rover(terrain, start, goal, earth_az=earth_az if args.earth_az is None else args.earth_az,
+                   earth_el=earth_el if args.earth_el is None else args.earth_el,
+                   sun_az=args.sun_az, sun_el=sun_el if args.sun_el is None else args.sun_el)
     if not r.get('summary'):
         print(r['reason'])
         return
