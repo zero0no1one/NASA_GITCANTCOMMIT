@@ -12,18 +12,19 @@ It is intended for demonstrations and early algorithm development. It is not fli
 
 1. Represents a landing region as an elevation grid, using a 1.2 km crop of NASA LOLA data on the Leibnitz Beta plateau (85.45° S, 31.55° E), with real latitude and longitude for every point.
 2. Finds landing hazards from slope, local roughness, missing data and, optionally, sunlight, and explains in plain language why a spot can or can't be landed on.
-3. Ranks the best landing sites on the map by flatness, smoothness and fuel, preferring spots with Earth and the Sun in view.
+3. Ranks the best landing sites on the map by flatness, smoothness and fuel, preferring spots with Earth and the Sun in view and spots the rover can drive away from.
 4. Flies a point-mass descent to the chosen target, checking fuel, thrust and terrain clearance, and can re-route from the lander's exact state mid-flight.
 5. Finds where terrain blocks the line of sight to Earth during the descent, including terrain up to 186 km away and lunar curvature.
 6. From a simulated outage, searches for reachable, hazard-filtered backup landing sites and ranks them.
 7. Plans a rover drive with A\* from the touchdown point, then reports time, speed, heading, Earth comms, sunlight and battery along the route. The rover re-plans from where it is whenever the goal or settings change.
+8. Generates random lunar surfaces on demand, with craters, boulders and ridges, and runs all of the above on each: best landing site, descent and the rover's best route to a goal near the largest crater.
 
 ## 2. Two ways to use it
 
 | | 3D app (`web/`) | Streamlit dashboard (`NASA Project/app.py`) |
 |---|---|---|
 | Best for | Choosing where to land and flying there: live coordinates, site ranking, in-flight diverts, rover | Analysis: every lander setting, your own DEMs, batch coverage, ZIP export |
-| Terrain | Built-in real sites and a synthetic test map | Synthetic, or any GeoTIFF you load |
+| Terrain | Built-in real sites, a synthetic test map and random surfaces | Synthetic, or any GeoTIFF you load |
 | Sun and Earth limits | Only what each site can really see | Free sliders |
 | Horizons | Terrain out to 186 km, with lunar curvature | Inside the loaded crop only |
 | Rover | Yes | No |
@@ -42,7 +43,7 @@ Dockerfile                 Builds the whole site as one service
 web/                       3D app: Vite, React, TypeScript, Three.js (see web/README.md)
 NASA Project/
 ├── echo_path/             The engine
-│   ├── terrain.py         Synthetic terrain, GeoTIFF loading, hazards, surrounding terrain layers
+│   ├── terrain.py         Synthetic and random terrain, GeoTIFF loading, hazards, surrounding terrain layers
 │   ├── comms.py           Line of sight and shadow raycasting
 │   ├── astro.py           Where the Sun and Earth can appear from a site
 │   ├── trajectory.py      Point-mass polynomial descent model
@@ -130,6 +131,10 @@ hazard = clip(0.65*slope/slope_limit + 0.35*rough/roughness_limit, 0, 1)
 
 A cell is eligible only when its entire landing neighbourhood is known and within both limits. Map edges and missing cells are excluded, and ineligible cells get a hazard of 1. Sunlight, where required, is a pass/fail filter rather than a weighted term.
 
+`random_moon(seed)` makes a 1.2 km surface at 10 m spacing, the same for the same seed. It layers rolling ground (random relief that fades at smaller scales), a ridge on about 60% of surfaces, 50–110 craters and boulders. Crater sizes follow a cumulative power law with exponent −2 (many small, few large, from 20 m up to 250–450 m). Fresh craters are deep with raised rims, and older ones are shallower. Fresh craters larger than 60 m are ringed with boulders. The rover goal is firm ground just outside the rim of the largest crater well inside the map. It is placed on the largest connected stretch of drivable ground, with margin below the rover's default limits; if there is no such crater, it goes on firm ground nearest the far corner. Across 300 seeds, the full run worked on 296: best landing site, descent, then rover to the goal. On the other 4, a ridge cut every reachable landing site off from the goal, and the app says so.
+
+Site ranking adds 0.5 to the score of any site from which a rover with default limits couldn't drive to the goal. Sites are checked with an edge-connected area, the same connectivity the route search uses.
+
 ### Line of sight (`comms.py`)
 
 `visibility()` marches a ray from each point toward an azimuth and elevation, and terrain above the ray blocks it. Within the crop it uses a local flat surface, at half-cell steps. If the terrain has surroundings, the ray continues across the coarser layers, using each one only outside finer data and lowering distant ground by d²/2R for lunar curvature. An elevation at or below 0° counts as blocked.
@@ -179,7 +184,7 @@ Cells over the slope or roughness limit (or with missing data) are blocked. `ast
 | Endpoint | Returns |
 |---|---|
 | `GET /api/terrains` | Available terrains and each one's sky limits |
-| `GET /api/terrain/{id}` | Elevation, hazard and slope grids (cached) |
+| `GET /api/terrain/{id}` | Elevation, hazard and slope grids (cached). `random-<seed>`, with a seed of up to 6 digits, is a generated surface, accepted by every endpoint |
 | `GET /api/terrain/{id}/horizon` | The surrounding landscape, for drawing (cached) |
 | `POST /api/sites` | Ranked landing sites with coordinates |
 | `POST /api/point` | Ground conditions and Earth and Sun visibility at a spot |
@@ -221,7 +226,7 @@ python -m pip install -r api/requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-The 76 tests cover hazards, line of sight, far terrain and curvature, Sun and Earth geometry, descent physics, fallback search, A\* and smoothing, battery behaviour, GeoTIFF loading, the bundled data, the evaluation, the API and the Streamlit dashboard.
+The 85 tests cover hazards, line of sight, far terrain and curvature, Sun and Earth geometry, descent physics, fallback search, A\* and smoothing, battery behaviour, random surfaces, GeoTIFF loading, the bundled data, the evaluation, the API and the Streamlit dashboard.
 
 Every push and pull request to `main` also runs lint and a build of the 3D app, then builds the deployable container and tests it under a 512 MB memory limit.
 

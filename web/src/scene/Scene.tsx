@@ -11,7 +11,7 @@ import { Horizon, Terrain } from './Terrain'
 import { Graticule, GroundMark, HoverReticle, SiteFlags } from './Overlays'
 import { Sky } from './Sky'
 import { Lander } from './Lander'
-import { Rover } from './Rover'
+import { Rover, RoverRoute } from './Rover'
 
 const noMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -220,7 +220,9 @@ export function Scene({ mission, track, end, landingEnd, phase, onChooseSite, on
       {mapReady && phase === 'plan' && <SiteFlags grid={grid} exaggeration={exaggeration} sites={sites} onPick={onChooseSite} />}
       {mapReady && (divertTo ?? target) && <GroundMark grid={grid} exaggeration={exaggeration} at={(divertTo ?? target)!} color="#e3b341" scale={1.3} />}
       {mapReady && pin && <GroundMark grid={grid} exaggeration={exaggeration} at={pin} color="#efebe1" />}
-      {goal && phase === 'drive' && <GroundMark grid={grid} exaggeration={exaggeration} at={goal} color="#79b4ff" scale={1.3} />}
+      {mapReady && goal && <GroundMark grid={grid} exaggeration={exaggeration} at={goal} color="#79b4ff" scale={1.3} />}
+      {/* Before touchdown, the rover's planned drive is shown faintly, so the whole route is visible from the start. */}
+      {mapReady && plan?.timeline && phase !== 'drive' && <RoverRoute grid={grid} timeline={plan.timeline} exaggeration={exaggeration} opacity={0.55} />}
       <HoverReticle grid={grid} exaggeration={exaggeration} />
       <Lander mission={mission} track={track} exaggeration={exaggeration} />
       {plan?.timeline && phase === 'drive' && <Rover grid={grid} timeline={plan.timeline} exaggeration={exaggeration} />}

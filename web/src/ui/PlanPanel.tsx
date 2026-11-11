@@ -18,10 +18,30 @@ function SiteRow({ site, rank, mission, chosen, onChoose }: {
           <span className="site-place">{north} {east}</span>
           <span className="site-facts">{site.slope_deg.toFixed(1)}° slope, {Math.round(site.fuel_remaining_kg)} kg fuel left</span>
           <span className="site-facts">{sky}</span>
+          {!site.rover_can_reach_goal && <span className="site-facts warn">The rover couldn’t reach its goal from here</span>}
         </span>
       </button>
     </li>
   )
+}
+
+function distance(m: number) {
+  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(2)} km`
+}
+
+/** The rover's best drive from where the lander will touch down, worked out before the flight. */
+function RoverRouteNote() {
+  const { plan, roverError, replanning } = useSimInputs()
+  if (replanning) return <p className="note">Working out the rover’s route from touchdown…</p>
+  if (plan?.summary && plan.reached_goal) {
+    return (
+      <p className="note">
+        After landing, the rover’s best route to its goal (blue marker) is {distance(plan.summary.distance_m)}, about {Math.max(1, Math.round(plan.summary.duration_s / 60))} min of driving.
+      </p>
+    )
+  }
+  if (roverError) return <p className="note warn">Rover: {roverError}</p>
+  return null
 }
 
 /** Before flight: where the terrain says to land, and what happens if contact is lost on the way. */
@@ -64,6 +84,7 @@ export function PlanPanel({ mission, onChooseSite }: { mission: Mission; onChoos
           {hasDropout ? `Earth drops out of view at T+${formatClock(outage.time_s)} on this route.` : 'Earth stays in view for the whole descent.'}
         </p>
       )}
+      {mapReady && <RoverRouteNote />}
 
       <details className="fold">
         <summary>Plan for losing contact</summary>

@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
-from echo_path.terrain import synthetic, load_dem, load_surround, hazards
+from echo_path.terrain import synthetic, random_moon, load_dem, load_surround, hazards
 from echo_path.astro import grid_to_lat_lon, site_of, sky_limits
 from echo_path.comms import visibility
 from echo_path.trajectory import Vehicle, trajectory
@@ -37,6 +37,8 @@ TERRAINS = {
                     'goal_pct': (15., 85.)},
     'synthetic': {'label': 'Synthetic ridge and landing basin (no real sky)', 'goal_pct': (90., 90.)},
 }
+RANDOM_PREFIX = 'random-'   # 'random-<seed>' is a generated surface; any seed up to six digits
+RANDOM_SEED_DIGITS = 6
 SYNTHETIC_SKY = {'earth_az': 270., 'earth_el': 3., 'earth_el_min': -5., 'earth_el_max': 30.,
                  'sun_az': 90., 'sun_el': 5., 'sun_el_min': -5., 'sun_el_max': 30., 'lat': None, 'lon': None}
 SUN_DEFAULT_FRACTION = .8   # a typical high Sun for the site, below its absolute peak
@@ -46,6 +48,7 @@ SITE_COUNT = 5
 SITE_CANDIDATES = 8
 SITE_SPACING_FRACTION = .08 # recommended sites stay this fraction of the map apart, so they offer real choices
 SITE_NO_VIEW_PENALTY = .1   # added to a site's score for each of Earth and Sun it can't see
+SITE_STRANDED_PENALTY = .5  # added when a rover with default limits couldn't drive from the site to the goal
 LANDER_ANTENNA_M = 3.
 
 app = FastAPI(title='Echo-Path API')
@@ -54,14 +57,25 @@ app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:5173', 'http
 app.add_middleware(GZipMiddleware, minimum_size=1024)   # a mission response is about 1 MB of JSON
 
 
+def _random_seed(terrain_id):
+    """The seed in a 'random-<seed>' terrain id, or None for any other id."""
+    digits = terrain_id[len(RANDOM_PREFIX):] if terrain_id.startswith(RANDOM_PREFIX) else ''
+    return int(digits) if digits.isdigit() and len(digits) <= RANDOM_SEED_DIGITS else None
+
+
 def _terrain(terrain_id):
-    if terrain_id not in TERRAINS:
+    if terrain_id not in TERRAINS and _random_seed(terrain_id) is None:
         raise HTTPException(404, f'Unknown terrain {terrain_id!r}.')
     return _load(terrain_id)
 
 
-@lru_cache(maxsize=None)
 def _load(terrain_id):
+    seed = _random_seed(terrain_id)
+    return _random_surface(seed) if seed is not None else _load_site(terrain_id)
+
+
+@lru_cache(maxsize=None)
+def _load_site(terrain_id):
     spec = TERRAINS[terrain_id]
     if 'dem' not in spec:
         return synthetic()
@@ -70,12 +84,21 @@ def _load(terrain_id):
     return t
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=16)   # anyone can ask for any seed, so only recent surfaces are kept
+def _random_surface(seed):
+    return random_moon(seed)
+
+
+@lru_cache(maxsize=64)
 def _sky(terrain_id):
     """What the app may offer for this terrain: real Sun and Earth limits, defaults and how far horizons are known."""
     t = _load(terrain_id)
-    goal = TERRAINS[terrain_id]['goal_pct']
-    known = {'goal_xy': [goal[0]/100*t.width, goal[1]/100*t.height], 'horizon_km': 0.}
+    if 'goal_xy' in t.metadata:
+        goal_xy = list(t.metadata['goal_xy'])
+    else:
+        goal = TERRAINS[terrain_id]['goal_pct']
+        goal_xy = [goal[0]/100*t.width, goal[1]/100*t.height]
+    known = {'goal_xy': goal_xy, 'horizon_km': 0.}
     if not t.surroundings:
         return {**SYNTHETIC_SKY, **known}
     lat, lon = site_of(t)
@@ -100,6 +123,23 @@ def _hazards(terrain_id, slope, roughness, footprint):
 @lru_cache(maxsize=32)
 def _rover_grid(terrain_id, rover, sun_az, sun_el):
     return traversability(_load(terrain_id), rover, sun_az, sun_el)
+
+
+@lru_cache(maxsize=16)
+def _goal_area(terrain_id):
+    """Cells a rover with default limits can drive between and the rover goal: one connected stretch of ground.
+
+    Joined through edges only: the route search never cuts diagonally between two blocked cells, so a diagonal
+    touch alone doesn't connect two areas.
+    """
+    from scipy.ndimage import label
+    t = _load(terrain_id)
+    open_ground = ~_rover_grid(terrain_id, Rover(), None, None)['blocked']
+    parts, _ = label(open_ground)
+    gx, gy = _sky(terrain_id)['goal_xy']
+    row = int(np.clip(round(gy/t.dy), 0, t.z.shape[0]-1))
+    col = int(np.clip(round(gx/t.dx), 0, t.z.shape[1]-1))
+    return parts == parts[row, col] if parts[row, col] else np.zeros_like(open_ground)
 
 
 def _grid(a, digits):
@@ -298,13 +338,18 @@ def landing_sites(req: SkyRequest):
     separation = SITE_SPACING_FRACTION*max(t.width, t.height)
     options, _ = plan_fallbacks(t, h, state, 0, vehicle, count=SITE_CANDIDATES, limit=SITE_CANDIDATES, separation=separation)
     sites = []
+    reach = _goal_area(req.terrain)
     for o in options:
         earth = _in_view(t, o['x_m'], o['y_m'], LANDER_ANTENNA_M, earth_az, earth_el)
         sun = _in_view(t, o['x_m'], o['y_m'], LANDER_ANTENNA_M, sun_az, sun_el)
         lat, lon = _lat_lon(t, o['x_m'], o['y_m'])
+        row = int(np.clip(round(o['y_m']/t.dy), 0, t.z.shape[0]-1))
+        col = int(np.clip(round(o['x_m']/t.dx), 0, t.z.shape[1]-1))
+        drive = bool(reach[row, col])
         sites.append({**{k: o[k] for k in ('x_m', 'y_m', 'hazard', 'slope_deg', 'roughness_m', 'fuel_used_kg', 'fuel_remaining_kg')},
                       'z_m': float(t.sample(o['x_m'], o['y_m'])), 'lat': lat, 'lon': lon, 'earth_visible': earth, 'sunlit': sun,
-                      'score': o['score']+SITE_NO_VIEW_PENALTY*((not earth)+(not sun))})
+                      'rover_can_reach_goal': drive,
+                      'score': o['score']+SITE_NO_VIEW_PENALTY*((not earth)+(not sun))+SITE_STRANDED_PENALTY*(not drive)})
     sites.sort(key=lambda s: s['score'])
     return {'sites': sites[:SITE_COUNT], 'earth': {'azimuth_deg': earth_az, 'elevation_deg': earth_el},
             'sun': {'azimuth_deg': sun_az, 'elevation_deg': sun_el}}

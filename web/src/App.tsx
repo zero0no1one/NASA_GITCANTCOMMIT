@@ -14,6 +14,15 @@ import { Transport } from './ui/Transport'
 const LAYERS: [Layer, string][] = [['surface', 'Surface'], ['safety', 'Landing safety'], ['slope', 'Slope'], ['elevation', 'Height']]
 const VIEWS: [CameraView, string][] = [['overview', 'Overview'], ['horizon', 'Horizon'], ['follow', 'Follow vehicle']]
 const STEPS: [Phase, string][] = [['plan', 'Plan'], ['descent', 'Descend'], ['drive', 'Drive']]
+const RANDOM_PREFIX = 'random-'
+
+/** Go to another map: its own sky, sites and plan, starting from scratch. */
+function switchTerrain(id: string) {
+  useSim.setState({
+    terrainId: id, earthAz: null, earthEl: null, missionEarthEl: null, sunAz: null, sunEl: null,
+    outageStep: null, target: null, pin: null, sites: [], touchdownRank: 0,
+  })
+}
 
 export default function App() {
   const { landingEnd, end, track } = usePlanner()
@@ -89,10 +98,17 @@ export default function App() {
         </div>
         {mission && <Readout grid={mission.terrain} />}
         <div className="view-tools">
-          <select aria-label="Terrain" value={terrainId}
-            onChange={(e) => set({ terrainId: e.target.value, earthAz: null, earthEl: null, missionEarthEl: null, sunAz: null, sunEl: null, outageStep: null, target: null, pin: null, sites: [], touchdownRank: 0 })}>
-            {terrains.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-          </select>
+          <div className="terrain-pick">
+            <select aria-label="Terrain" value={terrainId} onChange={(e) => switchTerrain(e.target.value)}>
+              {terrains.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+              {terrainId.startsWith(RANDOM_PREFIX) && (
+                <option value={terrainId}>Random surface #{terrainId.slice(RANDOM_PREFIX.length)}</option>
+              )}
+            </select>
+            <button type="button" className="secondary" onClick={() => switchTerrain(`${RANDOM_PREFIX}${Math.floor(Math.random() * 1e6)}`)}>
+              New random surface
+            </button>
+          </div>
           <div className="seg" role="group" aria-label="Map layer">
             {LAYERS.map(([id, label]) => (
               <button key={id} type="button" aria-pressed={layer === id} onClick={() => set({ layer: id })}>{label}</button>
