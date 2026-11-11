@@ -1,6 +1,6 @@
 # Echo-Path 3D
 
-A landing navigator on real lunar terrain: read the coordinates of any point on the Moon, see whether the ground there can be landed on, fly the lander there, then drive the rover. Built with Vite, React, TypeScript and Three.js (via React Three Fiber). All the physics runs in the Python engine (`NASA Project/echo_path/`), served by a small FastAPI app (`NASA Project/api/`).
+A lunar landing site navigator. First compare sites and dates: where the Sun and Earth sit against each site's real terrain skyline, when they set, and how much sunlight and Earth contact each site gets. Then, on real lunar terrain, read the coordinates of any point, see whether the ground there can be landed on, fly the lander there, and drive the rover. Built with Vite, React, TypeScript and Three.js (via React Three Fiber). All the physics runs in the Python engine (`NASA Project/echo_path/`), served by a small FastAPI app (`NASA Project/api/`).
 
 ## Run it
 
@@ -25,6 +25,15 @@ npm run dev
 Open http://localhost:5173. The dev server forwards `/api/...` to port 8000, so both must be running.
 
 ## How it works
+
+**Compare: which site, and when.** The app opens here, comparing four sites over one lunar day from now.
+- **Sites:** add sites from the curated list or type any coordinates (up to four).
+- **When:** choose a start time in UTC and a span of 14 days, a lunar day or 60 days.
+- **Horizon chart:** shows the focused site's skyline in every compass direction, with the Sun's and Earth's paths over the span, faded where terrain hides them.
+- **Now panel:** says whether the Sun and Earth are in view at the chosen moment, when they next set or rise, and the solar power available.
+- **Timelines:** show every site's sunlight and Earth-in-view periods on one clock. **Play** animates them.
+- **Table:** compares the share of time sunlit and with Earth in view, the longest night and average power, with the best value in each column in green.
+- **Simulate landing here:** appears for sites within 25 km of a detailed 3D map. It opens the 3D landing with the Sun and Earth as they were at that moment.
 
 **Plan: where to land.** The app ranks landing sites on the terrain by how flat and smooth the ground is and the fuel to reach it, preferring spots with Earth and the Sun in view. Move the cursor over the Moon to read its real latitude and longitude, elevation and slope. Click a spot, or type coordinates under **Go to coordinates**, to check it: the panel says whether it's safe to land and why not if it isn't, and whether Earth and the Sun are in view from there. Then choose **Land here**, and **Begin descent**.
 

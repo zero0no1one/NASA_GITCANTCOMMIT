@@ -9,6 +9,7 @@ import gzip
 import json
 import os
 from dataclasses import asdict, replace
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Optional
@@ -24,6 +25,8 @@ from echo_path.comms import visibility
 from echo_path.trajectory import Vehicle, trajectory
 from echo_path.routing import plan_fallbacks
 from echo_path.rover import Rover, traversability, plan_rover
+from echo_path.conditions import conditions as site_conditions
+from echo_path.ephemeris import span as ephemeris_span
 
 DATA = Path(__file__).resolve().parents[1] / 'data'
 WEB_DIST = Path(os.environ.get('ECHO_PATH_WEB_DIST', Path(__file__).resolve().parents[2] / 'web' / 'dist'))
@@ -50,6 +53,9 @@ SITE_SPACING_FRACTION = .08 # recommended sites stay this fraction of the map ap
 SITE_NO_VIEW_PENALTY = .1   # added to a site's score for each of Earth and Sun it can't see
 SITE_STRANDED_PENALTY = .5  # added when a rover with default limits couldn't drive from the site to the goal
 LANDER_ANTENNA_M = 3.
+CATALOG = DATA/'sites_catalog.json'
+MAX_DAYS = 60.              # longest span one request may cover
+MAX_COMPARE = 6             # most sites in one comparison
 
 app = FastAPI(title='Echo-Path API')
 app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173'],
@@ -258,6 +264,78 @@ class DivertRequest(BaseModel):
     target: tuple[float, float]
     earth_az: Optional[Azimuth] = None   # None = this terrain's default sky
     earth_el: Optional[Elevation] = None
+
+
+class Place(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=360)
+
+
+class ConditionsRequest(Place):
+    start: datetime                       # UTC if no offset is given
+    days: float = Field(29.5, gt=0, le=MAX_DAYS)
+    step_h: float = Field(1., ge=.25, le=24)
+
+
+class CompareRequest(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    sites: list[Place] = Field(min_length=1, max_length=MAX_COMPARE)
+    start: datetime
+    days: float = Field(29.5, gt=0, le=MAX_DAYS)
+    step_h: float = Field(1., ge=.25, le=24)
+
+
+def _utc(moment):
+    """A naive UTC timestamp, whatever offset the request used."""
+    return moment.astimezone(timezone.utc).replace(tzinfo=None) if moment.tzinfo else moment
+
+
+def _round(a, digits):
+    return np.round(np.asarray(a, float), digits).tolist()
+
+
+def _conditions(lat, lon, start, days, step_h):
+    try:
+        return site_conditions(lat, lon, _utc(start), days, step_h)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+
+@lru_cache(maxsize=1)
+def _catalog():
+    return json.loads(CATALOG.read_text(encoding='utf-8'))
+
+
+@app.get('/api/catalog')
+def catalog():
+    """Curated landing sites, and the dates the Sun and Earth tables cover."""
+    first, last = ephemeris_span()
+    return {**_catalog(), 'dates': {'first': f'{first}Z', 'last': f'{last}Z'}}
+
+
+@app.post('/api/conditions')
+def conditions_endpoint(req: ConditionsRequest):
+    """Sun and Earth over one site through time, against its terrain skyline."""
+    c = _conditions(req.lat, req.lon, req.start, req.days, req.step_h)
+    body = {key: {'azimuth': _round(c[key]['azimuth'], 2), 'elevation': _round(c[key]['elevation'], 3),
+                  'visible': _round(c[key]['visible'], 3)} for key in ('sun', 'earth')}
+    return {'site': c['site'], 'times': c['times'], 'step_h': c['step_h'], **body, 'power_w': _round(c['power_w'], 1),
+            'horizon': _round(c['horizon'], 2), 'sunlight_windows': c['sunlight_windows'],
+            'earth_windows': c['earth_windows'], 'summary': c['summary']}
+
+
+@app.post('/api/compare')
+def compare(req: CompareRequest):
+    """Summaries for several sites over the same span, for a side-by-side table."""
+    out = []
+    for place in req.sites:
+        c = _conditions(place.lat, place.lon, req.start, req.days, req.step_h)
+        out.append({'lat': place.lat, 'lon': c['site']['lon'], 'summary': c['summary'],
+                    'sunlight_windows': c['sunlight_windows'], 'earth_windows': c['earth_windows']})
+    return {'sites': out}
 
 
 @app.get('/api/health')

@@ -1,0 +1,273 @@
+{
+ "frame": "MOON_ME (DE421 mean Earth/polar axis), east longitude positive",
+ "sites": [
+  {
+   "id": "site01",
+   "name": "Connecting ridge",
+   "group": "South pole candidates",
+   "lat": -89.44,
+   "lon": -137.0999,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -89.4632,
+    -137.4896
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "sl3",
+   "name": "Connecting ridge extension",
+   "group": "South pole candidates",
+   "lat": -89.3168,
+   "lon": -114.0411,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -89.0324,
+    -101.9993
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "site04",
+   "name": "Shackleton rim",
+   "group": "South pole candidates",
+   "lat": -89.4913,
+   "lon": -138.9958,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -89.7668,
+    -171.8699
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "site07",
+   "name": "Peak near Shackleton",
+   "group": "South pole candidates",
+   "lat": -88.8077,
+   "lon": 123.8131,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -88.811,
+    123.6901
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "site06",
+   "name": "Nobile rim 1",
+   "group": "South pole candidates",
+   "lat": -85.2314,
+   "lon": 36.5689,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -85.4381,
+    37.3667
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "dm2",
+   "name": "Nobile rim 2",
+   "group": "South pole candidates",
+   "lat": -84.0953,
+   "lon": 54.2274,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -83.954,
+    58.8221
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "site11",
+   "name": "de Gerlache rim",
+   "group": "South pole candidates",
+   "lat": -88.6648,
+   "lon": -68.3773,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -88.6834,
+    -67.9321
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "site42",
+   "name": "de Gerlache-Kocher massif",
+   "group": "South pole candidates",
+   "lat": -85.4603,
+   "lon": -115.1436,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -85.8296,
+    -116.322
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "site20",
+   "name": "Leibnitz Beta plateau",
+   "group": "South pole candidates",
+   "lat": -85.4034,
+   "lon": 31.6796,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -85.4266,
+    31.7428
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "site23",
+   "name": "Malapert massif",
+   "group": "South pole candidates",
+   "lat": -85.9876,
+   "lon": 2.0528,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -85.9948,
+    -0.2358
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "haworth",
+   "name": "Haworth",
+   "group": "South pole candidates",
+   "lat": -86.3628,
+   "lon": -23.2095,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -86.7639,
+    -22.777
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "dm1",
+   "name": "Amundsen rim",
+   "group": "South pole candidates",
+   "lat": -84.5595,
+   "lon": 67.4175,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -84.2287,
+    69.444
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "lm7",
+   "name": "Faustini rim A",
+   "group": "South pole candidates",
+   "lat": -87.77,
+   "lon": 94.7158,
+   "note": "Crest of the highest ground in NASA PGDA's surveyed 16 km LOLA tile",
+   "tile_centre": [
+    -87.8897,
+    90.0
+   ],
+   "source": "https://pgda.gsfc.nasa.gov/products/78"
+  },
+  {
+   "id": "apollo-11",
+   "name": "Apollo 11",
+   "group": "Apollo",
+   "lat": 0.674,
+   "lon": 23.473,
+   "note": "Landed",
+   "source": "https://nssdc.gsfc.nasa.gov/planetary/lunar/apolloland.html"
+  },
+  {
+   "id": "apollo-12",
+   "name": "Apollo 12",
+   "group": "Apollo",
+   "lat": -3.013,
+   "lon": -23.422,
+   "note": "Landed",
+   "source": "https://nssdc.gsfc.nasa.gov/planetary/lunar/apolloland.html"
+  },
+  {
+   "id": "apollo-14",
+   "name": "Apollo 14",
+   "group": "Apollo",
+   "lat": -3.646,
+   "lon": -17.472,
+   "note": "Landed",
+   "source": "https://nssdc.gsfc.nasa.gov/planetary/lunar/apolloland.html"
+  },
+  {
+   "id": "apollo-15",
+   "name": "Apollo 15",
+   "group": "Apollo",
+   "lat": 26.132,
+   "lon": 3.633,
+   "note": "Landed",
+   "source": "https://nssdc.gsfc.nasa.gov/planetary/lunar/apolloland.html"
+  },
+  {
+   "id": "apollo-16",
+   "name": "Apollo 16",
+   "group": "Apollo",
+   "lat": -8.973,
+   "lon": 15.501,
+   "note": "Landed",
+   "source": "https://nssdc.gsfc.nasa.gov/planetary/lunar/apolloland.html"
+  },
+  {
+   "id": "apollo-17",
+   "name": "Apollo 17",
+   "group": "Apollo",
+   "lat": 20.191,
+   "lon": 30.772,
+   "note": "Landed",
+   "source": "https://nssdc.gsfc.nasa.gov/planetary/lunar/apolloland.html"
+  },
+  {
+   "id": "chandrayaan-3-vikram",
+   "name": "Chandrayaan-3 (Vikram)",
+   "group": "Other nations",
+   "lat": -69.3741,
+   "lon": 32.32,
+   "note": "Landed",
+   "source": "https://lroc.im-ldi.com/images/1314"
+  },
+  {
+   "id": "change-4",
+   "name": "Chang'e 4",
+   "group": "Other nations",
+   "lat": -45.4561,
+   "lon": 177.5885,
+   "note": "Landed",
+   "source": "https://lroc.im-ldi.com/images/1087"
+  },
+  {
+   "id": "change-6",
+   "name": "Chang'e 6",
+   "group": "Other nations",
+   "lat": -41.6385,
+   "lon": -153.9852,
+   "note": "Landed",
+   "source": "https://lroc.im-ldi.com/images/1374"
+  },
+  {
+   "id": "intuitive-machines-im-1-odysseus",
+   "name": "Intuitive Machines IM-1 (Odysseus)",
+   "group": "Commercial (CLPS)",
+   "lat": -80.13,
+   "lon": 1.44,
+   "note": "Landed",
+   "source": "https://www.nasa.gov/missions/lro/nasas-lro-images-intuitive-machines-odysseus-lander/"
+  },
+  {
+   "id": "firefly-blue-ghost-mission-1",
+   "name": "Firefly Blue Ghost Mission 1",
+   "group": "Commercial (CLPS)",
+   "lat": 18.5623,
+   "lon": 61.8103,
+   "note": "Landed",
+   "source": "https://lroc.im-ldi.com/images/1407"
+  }
+ ]
+}

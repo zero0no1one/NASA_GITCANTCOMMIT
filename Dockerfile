@@ -16,8 +16,8 @@ COPY ["NASA Project/echo_path", "./echo_path"]
 COPY ["NASA Project/api", "./api"]
 COPY ["NASA Project/data", "./data"]
 COPY --from=web /web/dist ./web_dist
-# Fail the build, not the live site, if the terrain files can't be read in this image.
-RUN python -c "from api.main import terrains; terrains()"
+# Fail the build, not the live site, if the terrain, ephemeris or skyline files can't be read in this image.
+RUN python -c "from api.main import terrains, catalog; terrains(); catalog(); from echo_path.conditions import conditions; conditions(-89.44, -137.1, '2027-01-01T00:00', 1)"
 ENV ECHO_PATH_WEB_DIST=/app/web_dist
 ENV PYTHONUNBUFFERED=1
 RUN useradd --uid 1000 --create-home app

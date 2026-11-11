@@ -36,6 +36,25 @@ All are south polar stereographic (`+proj=stere +lat_0=-90 +lat_ts=-90 +lon_0=0 
 | Crops, slope, 40 m layers | NASA GSFC PGDA *South Pole Landing Site LOLA DEMs*, https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/ (Site20 and Site04) | Barker, M. K. et al. (2021). *Improved LOLA elevation maps for south pole landing sites: Error estimates and their impact on illumination conditions.* Planetary and Space Science 203, 105119. doi:10.1016/j.pss.2020.105119 |
 | 640 m layer | NASA GSFC PGDA `LDEM_80S_80MPP_ADJ.TIF`, https://pgda.gsfc.nasa.gov/products/90 | Barker, M. K. et al. (2023). *A New View of the Lunar South Pole from LOLA.* Planetary Science Journal 4, 183. doi:10.3847/PSJ/acf3e1 |
 
+## Sun, Earth and sites over time (the Compare screen)
+
+| File | Size | What it is | Built by |
+|---|---|---|---|
+| `ephemeris_moon_2026_2030.csv.gz` | 0.9 MB | Hourly sub-Earth point, sub-solar point and Earth–Moon distance, 2026-01-01 to 2031-01-01 UTC | `make_ephemeris.py` |
+| `ldem_4.img`, `ldem_4.lbl` | 2.1 MB | Global LOLA elevation map, 4 pixels per degree (about 7.6 km), unchanged from PDS | Downloaded as-is |
+| `sites_catalog.json` | small | 24 curated sites with sources | `make_site_catalog.py` |
+| `site_patches_80m.npz` | 1.7 MB | 24 km patches of the 80 m south polar mosaic around each curated south-pole site | `make_site_patches.py` |
+
+- **Ephemeris:** NASA JPL Horizons (DE441), target 301 (the Moon) seen from Earth's centre. Quantities 14 (ObsSub-LON/LAT), 15 (SunSub-LON/LAT) and 20 (delta) are in the Moon's MOON_ME frame, east longitude positive. https://ssd.jpl.nasa.gov/horizons/
+- **Global terrain:** LRO LOLA gridded data record `LDEM_4`, from the PDS Geosciences Node: https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/. Height = stored value × 0.5 m above the 1,737.4 km sphere. Smith, D. E. et al. (2010). *Initial observations from the Lunar Orbiter Laser Altimeter (LOLA).* Geophysical Research Letters 37, L18204. doi:10.1029/2010GL043751
+- **South-pole sites:** NASA GSFC PGDA's surveyed 5 m/px LOLA site tiles, https://pgda.gsfc.nasa.gov/products/78, read from each GeoTIFF's header. Each site is placed at the highest point of its tile on the 640 m map, then refined to the highest point within 1.5 km on the 80 m mosaic. A tile's centre can fall inside a crater (Shackleton's does); the rims, ridges and massifs the regions are named for are high ground. These are not official landing points: NASA hasn't published coordinates for the Artemis III candidate regions.
+- **Past landings:**
+  - Apollo: NSSDC, https://nssdc.gsfc.nasa.gov/planetary/lunar/apolloland.html (DE421 mean-Earth/polar-axis frame).
+  - Chandrayaan-3, Chang'e 4, Chang'e 6 and Blue Ghost Mission 1: LROC, https://lroc.im-ldi.com/images/1314, /1087, /1374 and /1407.
+  - IM-1 Odysseus: NASA, https://www.nasa.gov/missions/lro/nasas-lro-images-intuitive-machines-odysseus-lander/.
+
+Rebuild from `NASA Project/` with `python data/make_ephemeris.py`, then `python data/make_site_catalog.py`, then `python data/make_site_patches.py`. Set `PYTHONPATH` to that folder for the last two.
+
 ## How horizons work
 
 `echo_path/comms.py` first checks each ray against the 5 m crop, then marches it across the coarser layers using only the parts outside finer data. Coarser layers also allow for lunar curvature, which lowers distant ground by d²/2R: about 2.9 km at 100 km away.

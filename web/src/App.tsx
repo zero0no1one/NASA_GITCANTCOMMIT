@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { fetchDivert, type LandingSite } from './api'
+import { fetchConditions, fetchDivert, type LandingSite, type TerrainInfo } from './api'
 import { phaseAt, useSim, useSimInputs, type CameraView, type Layer, type Phase } from './state'
 import { sampleFlight } from './track'
 import { usePlanner } from './usePlanner'
@@ -10,11 +10,28 @@ import { FlightPanel } from './ui/FlightPanel'
 import { DrivePanel } from './ui/DrivePanel'
 import { SettingsPanel, SpotPanel } from './ui/SpotPanel'
 import { Transport } from './ui/Transport'
+import { CompareView, type ChosenSite } from './ui/compare/CompareView'
 
 const LAYERS: [Layer, string][] = [['surface', 'Surface'], ['safety', 'Landing safety'], ['slope', 'Slope'], ['elevation', 'Height']]
 const VIEWS: [CameraView, string][] = [['overview', 'Overview'], ['horizon', 'Horizon'], ['follow', 'Follow vehicle']]
-const STEPS: [Phase, string][] = [['plan', 'Plan'], ['descent', 'Descend'], ['drive', 'Drive']]
+const STEPS: [Phase | 'compare', string][] = [['compare', 'Compare'], ['plan', 'Plan'], ['descent', 'Descend'], ['drive', 'Drive']]
 const RANDOM_PREFIX = 'random-'
+const MOON_RADIUS_KM = 1737.4
+const NEARBY_KM = 25   // how close a site must be to a 3D landing map for "Simulate landing here"
+
+function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const r = Math.PI / 180
+  const a = Math.sin(((lat2 - lat1) * r) / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(((lon2 - lon1) * r) / 2) ** 2
+  return 2 * MOON_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(a)))
+}
+
+/** The real-terrain 3D map closest to a site, if one is near enough to stand in for it. */
+function nearestMap(terrains: TerrainInfo[], site: ChosenSite) {
+  const maps = terrains.filter((t) => t.sky.lat !== null && t.sky.lon !== null)
+    .map((t) => ({ t, km: distanceKm(site.lat, site.lon, t.sky.lat!, t.sky.lon!) }))
+    .sort((a, b) => a.km - b.km)
+  return maps[0] && maps[0].km <= NEARBY_KM ? maps[0] : null
+}
 
 /** Go to another map: its own sky, sites and plan, starting from scratch. */
 function switchTerrain(id: string) {
@@ -27,8 +44,28 @@ function switchTerrain(id: string) {
 export default function App() {
   const { landingEnd, end, track } = usePlanner()
   const inputs = useSimInputs()
-  const { mission, loading, missionError, terrains, terrainId, layer, view, set } = inputs
+  const { mission, loading, missionError, terrains, terrainId, layer, view, mode, set } = inputs
   const phase = useSim((s) => phaseAt(s.simTime, s.playing, mission ? landingEnd : Infinity))
+
+  const nearby = useCallback((site: ChosenSite) => {
+    const m = nearestMap(terrains, site)
+    return m ? { label: m.t.label.split(',')[0].replace(/^LOLA /, ''), distanceKm: m.km } : null
+  }, [terrains])
+
+  // The 3D map uses grid azimuths (clockwise from the polar map's north); at longitude L, grid = compass + L.
+  const simulate = useCallback(async (site: ChosenSite, time: string) => {
+    const m = nearestMap(terrains, site)
+    if (!m) return
+    const { lat, lon } = m.t.sky as { lat: number; lon: number }
+    const c = await fetchConditions({ lat, lon, start: time, days: 0.25, step_h: 0.25 })
+    const grid = (az: number) => Math.round(((az + lon) % 360 + 360) % 360)
+    if (m.t.id !== useSim.getState().terrainId) switchTerrain(m.t.id)
+    const earthEl = Math.round(c.earth.elevation[0] * 10) / 10
+    useSim.setState({
+      mode: 'simulate', skyDate: time, sunAz: grid(c.sun.azimuth[0]), sunEl: Math.round(c.sun.elevation[0] * 10) / 10,
+      earthAz: grid(c.earth.azimuth[0]), earthEl, missionEarthEl: earthEl,
+    })
+  }, [terrains])
 
   const chooseSite = useCallback((site: LandingSite) => {
     const place: [number, number] = [site.x_m, site.y_m]
@@ -79,6 +116,26 @@ export default function App() {
     return i >= 0 ? track.t[i] : null
   })() : null
 
+  const steps = (
+    <ol className="steps" aria-label="Mission phase">
+      {STEPS.map(([id, label]) => {
+        const now = mode === 'compare' ? id === 'compare' : id === phase
+        return <li key={id} className={now ? 'now' : ''} aria-current={now ? 'step' : undefined}>{label}</li>
+      })}
+    </ol>
+  )
+
+  if (mode === 'compare') {
+    return (
+      <div className="app compare-app">
+        <header className="top compare-top">
+          <div className="brand"><h1>Echo-Path</h1>{steps}</div>
+        </header>
+        <CompareView nearby={nearby} onSimulate={(site, time) => void simulate(site, time)} />
+      </div>
+    )
+  }
+
   return (
     <div className="app">
       <div className="stage">
@@ -92,12 +149,11 @@ export default function App() {
       <header className="top">
         <div className="brand">
           <h1>Echo-Path</h1>
-          <ol className="steps" aria-label="Mission phase">
-            {STEPS.map(([id, label]) => <li key={id} className={id === phase ? 'now' : ''} aria-current={id === phase ? 'step' : undefined}>{label}</li>)}
-          </ol>
+          {steps}
         </div>
         {mission && <Readout grid={mission.terrain} />}
         <div className="view-tools">
+          <button type="button" className="quiet" onClick={() => set({ mode: 'compare', playing: false })}>‹ Compare sites and dates</button>
           <div className="terrain-pick">
             <select aria-label="Terrain" value={terrainId} onChange={(e) => switchTerrain(e.target.value)}>
               {terrains.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
