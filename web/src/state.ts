@@ -6,6 +6,7 @@ import { sampleRover, type Divert } from './track'
 export type Layer = 'surface' | 'safety' | 'slope' | 'elevation'
 export type CameraView = 'overview' | 'horizon' | 'follow'
 export type Phase = 'plan' | 'descent' | 'drive'
+export type Mode = 'compare' | 'simulate'
 
 /** A stretch already driven under an earlier plan, from simulation time `start` up to `end`. */
 export interface DrivenLeg {
@@ -15,6 +16,8 @@ export interface DrivenLeg {
 }
 
 interface SimState {
+  mode: Mode                      // comparing sites and dates, or simulating a landing in 3D
+  skyDate: string | null          // the UTC time the 3D sky was set from, until a sky slider moves it
   terrains: TerrainInfo[]
   terrainId: string
   earthEl: number | null          // null = this terrain's default sky (also the Sun and Earth azimuth below)
@@ -63,6 +66,8 @@ interface SimState {
 }
 
 export const useSim = create<SimState>((set) => ({
+  mode: 'compare',
+  skyDate: null,
   terrains: [],
   terrainId: 'lola_site20',
   earthEl: null,

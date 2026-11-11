@@ -1,10 +1,10 @@
 # What we learned from Echo-Path
 
-Notes for future projects: what worked, what broke and what we'd do differently. Echo-Path itself is a separate practice project.
+Notes for future projects: what worked, what broke and what we'd do differently.
 
 ## Before building
 
-- **Read the event rules and the challenge list first.** Space Apps says teams shouldn't start on their project until the hackathon begins, and its challenge statements come out about two weeks before that. We found both after building.
+- **Read the event rules and the challenge list first.** Space Apps says teams shouldn't start on their project until the hackathon begins, and its challenge statements come out about two weeks before that. We found both after building, and asked an organiser before building the entry on earlier work.
 - **Check what the rules require in a submission.** For Space Apps 2026 that includes describing how AI tools were used, licensing your own work as open source, and citing every source.
 - **Decide what the project is for early.** Echo-Path started around communication outages and later moved to landing navigation. The code and UI moved with it, but the paper didn't.
 

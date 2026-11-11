@@ -210,6 +210,55 @@ export interface RoverRequest {
   start_battery_pct?: number
 }
 
+export interface CatalogSite {
+  id: string
+  name: string
+  group: string
+  lat: number
+  lon: number
+  note: string
+  source: string
+}
+
+export interface Catalog {
+  frame: string
+  sites: CatalogSite[]
+  dates: { first: string; last: string }
+}
+
+/** A body's path across the sky: true compass azimuth and elevation (degrees), and how much of its disc shows. */
+export interface SkyTrack {
+  azimuth: number[]
+  elevation: number[]
+  visible: number[]
+}
+
+export interface ConditionsSummary {
+  sunlit_pct: number
+  earth_visible_pct: number
+  both_pct: number
+  longest_dark_h: number
+  longest_sunlit_h: number
+  longest_no_earth_h: number
+  mean_sun_elevation_lit: number | null
+  max_sun_elevation: number
+  mean_power_w: number
+  energy_kwh: number
+}
+
+export interface Conditions {
+  site: { lat: number; lon: number; eye_m: number }
+  times: string[]
+  step_h: number
+  sun: SkyTrack
+  earth: SkyTrack
+  power_w: number[]
+  horizon: number[]          // skyline elevation for compass directions 0..359°
+  sunlight_windows: [string, string][]
+  earth_windows: [string, string][]
+  summary: ConditionsSummary
+}
+
 async function call<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, body === undefined ? undefined : {
     method: 'POST',
@@ -224,6 +273,21 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export const fetchTerrains = () => call<TerrainInfo[]>('/api/terrains')
+export const fetchCatalog = () => call<Catalog>('/api/catalog')
+
+// Conditions only depend on place and time, so each answer is kept for the session.
+const conditionsCache = new Map<string, Promise<Conditions>>()
+
+export function fetchConditions(req: { lat: number; lon: number; start: string; days: number; step_h: number }) {
+  const key = JSON.stringify(req)
+  let result = conditionsCache.get(key)
+  if (!result) {
+    result = call<Conditions>('/api/conditions', req)
+    conditionsCache.set(key, result)
+    result.catch(() => conditionsCache.delete(key))
+  }
+  return result
+}
 export const fetchRover = (req: RoverRequest) => call<RoverPlan>('/api/rover', req)
 export const fetchSites = (req: SkyRequest) => call<{ sites: LandingSite[] }>('/api/sites', req)
 export const fetchPoint = (req: SkyRequest & { x: number; y: number }) => call<PointReport>('/api/point', req)

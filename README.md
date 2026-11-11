@@ -1,14 +1,25 @@
 # Echo-Path
 
-**Status: a practice project built before NASA Space Apps Challenge 2026. It is not the team's entry.** What we learned from it is in `LESSONS.md`.
+**NASA Space Apps Challenge 2026 entry: [Lunar Landing Site Navigator](https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/).** Echo-Path began before the event as a practice project. An event organiser allowed the team to build the entry on it, and the submission says what existed before and what was added for the challenge. What we learned along the way is in `LESSONS.md`.
 
 **Live demo: https://nasa-gitcantcommit.onrender.com/** (free hosting: it can take about a minute to wake after 15 idle minutes)
 
-Echo-Path is a research prototype that maps coordinates on the Moon and navigates a vehicle to where the terrain says it can land. Using real NASA LOLA elevation data, it reads the ground at any latitude and longitude, recommends safe landing sites, flies a lander there and can divert it mid-flight, and then drives a rover from wherever it touched down. Along the way it tracks what terrain does to the mission: where the line of sight to Earth is lost, what's in shadow, and what fuel and battery remain.
+**Compare landing sites and dates.** Pick up to four sites, from a curated list (NASA's surveyed south-pole candidate regions, Apollo, Chandrayaan-3, Chang'e, commercial landers) or any latitude and longitude, and a date from 2026 to 2030. For each site the app shows the real terrain skyline in every direction, with where the Sun and Earth travel against it. It also gives when they set and rise, how much of the time each site has sunlight, Earth in view and both, the longest night, and the solar power a panel would get. Sun and Earth positions come from NASA JPL Horizons; terrain from NASA's LOLA laser altimeter.
+
+**Then fly a landing there.** For sites near Echo-Path's detailed 5 m terrain, "Simulate landing here" opens a 3D landing with that moment's Sun and Earth. In the simulation, Echo-Path maps coordinates on the Moon and navigates a vehicle to where the terrain says it can land. Using real NASA LOLA elevation data, it reads the ground at any latitude and longitude, recommends safe landing sites, flies a lander there and can divert it mid-flight, and then drives a rover from wherever it touched down. Along the way it tracks what terrain does to the mission: where the line of sight to Earth is lost, what's in shadow, and what fuel and battery remain.
 
 It is intended for demonstrations and early algorithm development. It is not flight software, an operational mission planner, or proof that a trajectory is safe for a real spacecraft.
 
 ## 1. What it does
+
+**Sites and dates** (the Compare screen):
+
+- Works out the terrain skyline at any point on the Moon in all 360 compass directions. It uses 80 m terrain near the curated south-pole sites, 640 m terrain across the south polar region and 7.6 km terrain elsewhere, out to 400 km, with the Moon's curvature.
+- Places the Sun and Earth in each site's sky at any hour from 2026 to 2030, from NASA JPL Horizons. Earth includes its parallax and its monthly wobble (libration).
+- Finds sunlight and Earth-in-view windows, the time until the next sunset or Earthset, and the longest night and the longest time without Earth. It also gives power for a 1 m² Sun-facing panel.
+- Compares up to four sites over the same 14, 29.5 or 60 days, with a horizon chart, timelines, a table and an animation.
+
+**Landing simulation** (the 3D Plan, Descend and Drive screens):
 
 1. Represents a landing region as an elevation grid, using a 1.2 km crop of NASA LOLA data on the Leibnitz Beta plateau (85.45° S, 31.55° E), with real latitude and longitude for every point.
 2. Finds landing hazards from slope, local roughness, missing data and, optionally, sunlight, and explains in plain language why a spot can or can't be landed on.
@@ -46,6 +57,9 @@ NASA Project/
 │   ├── terrain.py         Synthetic and random terrain, GeoTIFF loading, hazards, surrounding terrain layers
 │   ├── comms.py           Line of sight and shadow raycasting
 │   ├── astro.py           Where the Sun and Earth can appear from a site
+│   ├── ephemeris.py       Sun and Earth over the Moon at any time, 2026-2030 (JPL Horizons table)
+│   ├── horizon.py         Terrain skyline around any latitude and longitude
+│   ├── conditions.py      Sunlight, Earth visibility, windows and power over time
 │   ├── trajectory.py      Point-mass polynomial descent model
 │   ├── routing.py         Fallback candidate search and ranking
 │   ├── rover.py           A* route, smoothing, timed drive with comms, sunlight and battery
@@ -145,6 +159,34 @@ Site ranking adds 0.5 to the score of any site from which a rover with default l
 
 A simple Moon-fixed geometry using published extremes: libration of about ±6.7° in latitude and ±7.9° in longitude, a solar latitude within ±1.54°, and Earth's small parallax. It gives each site's possible range. It is not a time-resolved ephemeris.
 
+### Sun, Earth and skyline over time (`ephemeris.py`, `horizon.py`, `conditions.py`)
+
+**Ephemeris.** An hourly table from NASA JPL Horizons (DE441) for 2026 to 2030 holds where Earth is overhead on the Moon, where the Sun is overhead, and the Earth–Moon distance. These are in the Moon's mean-Earth/polar-axis frame, the frame LOLA uses. Values between hours are interpolated, and three spot checks against Horizons at odd minutes agreed to 0.0001°. `data/make_ephemeris.py` rebuilds it.
+
+**Sky position.** In the site's local east-north-up frame:
+
+```text
+elevation = asin(d · up)
+azimuth   = atan2(d · east, d · north)     clockwise from true north (toward the north pole)
+```
+
+`d` is the unit vector from the site toward the body. For Earth, `d` comes from the sub-Earth point scaled by Earth's distance minus the site's position, which gives parallax, up to about 1°. Elevations agree with `astro.py` to six decimal places.
+
+**Skyline.** Great-circle rays go out every 1° of azimuth, with 320 samples spaced logarithmically from 300 m to 400 km. Each sample's elevation angle uses exact sphere geometry:
+
+```text
+angle = atan2((R + h) cos g − (R + h0 + eye), (R + h) sin g)      g = distance / R
+```
+
+The skyline is the highest angle along each ray, seen from 2 m above the ground. With no atmosphere there is no refraction. Heights are taken from the finest map that covers each point: 80 m patches 24 km across around the curated south-pole sites, the 640 m polar map, then the global 7.6 km map.
+
+**Visibility and power.** The share of a disc above the skyline is treated as a circular segment (Sun radius 0.27°, Earth radius from its distance). A body counts as in view when at least half its disc shows. Power is 1361 W/m² × 30% × the visible share of the Sun, for 1 m² of panel facing the Sun: an illustrative assumption.
+
+**Checks:**
+
+- **Results against published lighting studies.** Over 2026, Connecting ridge is sunlit 90% of the time and the peak near Shackleton 86%; published studies give about 85–90% for the best points there. Near-side sites always see Earth, and Chang'e 4 on the far side never does. Low-latitude sites are lit 49–51% of the time, with nights of about 14.8 days.
+- **Skyline against the existing code.** At the Site 20 crop, the skyline matches `comms.py`'s far-terrain line of sight to within 0.2° in most directions, and to within 1.6° where that code also uses the 5 m crop.
+
 ### Descent (`trajectory.py`)
 
 `Vehicle` stores dry mass, fuel, maximum thrust, specific impulse, lunar gravity (1.62 m/s²) and g0 (9.80665 m/s²).
@@ -183,6 +225,9 @@ Cells over the slope or roughness limit (or with missing data) are blocked. `ast
 
 | Endpoint | Returns |
 |---|---|
+| `GET /api/catalog` | Curated landing sites with sources, and the dates covered |
+| `POST /api/conditions` | One site over time: Sun and Earth paths, skyline, windows, summary (up to 60 days) |
+| `POST /api/compare` | Summaries for up to 6 sites over the same span |
 | `GET /api/terrains` | Available terrains and each one's sky limits |
 | `GET /api/terrain/{id}` | Elevation, hazard and slope grids (cached). `random-<seed>`, with a seed of up to 6 digits, is a generated surface, accepted by every endpoint |
 | `GET /api/terrain/{id}/horizon` | The surrounding landscape, for drawing (cached) |
@@ -226,11 +271,18 @@ python -m pip install -r api/requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-The 85 tests cover hazards, line of sight, far terrain and curvature, Sun and Earth geometry, descent physics, fallback search, A\* and smoothing, battery behaviour, random surfaces, GeoTIFF loading, the bundled data, the evaluation, the API and the Streamlit dashboard.
+The 101 tests cover hazards, line of sight, far terrain and curvature, Sun and Earth geometry, the ephemeris and its known ranges, skylines, sunlight and Earth visibility at real sites, descent physics, fallback search, A\* and smoothing, battery behaviour, random surfaces, GeoTIFF loading, the bundled data, the evaluation, the API and the Streamlit dashboard.
 
 Every push and pull request to `main` also runs lint and a build of the 3D app, then builds the deployable container and tests it under a 512 MB memory limit.
 
-**Manual checks.** For the dashboard, follow the checklist in `NASA Project/README.md`. For the 3D app:
+**Manual checks.** For the dashboard, follow the checklist in `NASA Project/README.md`. For the Compare screen:
+
+1. On opening, it compares Connecting ridge, Leibnitz Beta plateau, Malapert massif and Apollo 11, and highlights the best value in each column.
+2. **Play** moves the Sun and Earth along their paths on the horizon chart. Clicking a timeline bar jumps there.
+3. Adding `-84.6`, `31.0` under **Or any coordinates** adds that site, or explains that the limit is 4.
+4. For Leibnitz Beta plateau, **Simulate landing here** opens the 3D landing, with the settings saying which UTC time the sky was taken from.
+
+For the 3D app:
 
 1. Moving the cursor over the Moon updates the large coordinate and the reticle, which turns orange over ground that can't be landed on.
 2. Clicking a numbered flag or list row chooses that site; **Begin descent** flies there.
@@ -242,7 +294,11 @@ Every push and pull request to `main` also runs lint and a build of the 3D app, 
 
 ## 10. Known limitations
 
-- Sun and Earth are fixed during a run; there is no time-resolved ephemeris, and no relay satellites.
+- In the 3D landing, the Sun and Earth stay where they were at the chosen moment for the whole run. The Compare screen moves them through time. There are no relay satellites.
+- Skyline accuracy depends on the map. Near the curated south-pole sites it uses 80 m terrain. Elsewhere in the polar region, ridges within a few kilometres are smoothed, which can make the skyline a few degrees too low. Away from the pole, the global map is about 7.6 km per pixel, so local hills and crater walls don't show.
+- Curated south-pole sites are the crest of the highest ground in each NASA PGDA survey tile, not official landing points; NASA hasn't published coordinates for the Artemis III regions.
+- Dates are limited to 2026–2030, the span of the bundled ephemeris table.
+- Solar power assumes a Sun-facing panel; no shadowing by the lander itself, no dust, no temperature effects.
 - No radio link budget, antenna pointing or handover. Comms means geometric line of sight only.
 - Earth at or below 0° counts as blocked, even for a lander high enough to see slightly past the local horizon.
 - At 5 m/pixel, boulders and small craters are not resolved, and DEM uncertainty is not modelled.
@@ -256,7 +312,7 @@ These limits must be resolved or explicitly bounded before using outputs for any
 
 ## 11. Possible next steps
 
-1. Time-resolved Earth and Sun positions from an ephemeris, and relay satellites.
+1. Relay satellites, and Sun and Earth moving during the 3D landing.
 2. Uncertainty margins on slope, roughness, clearance and line of sight.
 3. Constrained powered-descent guidance in place of the cubic evaluator, with attitude and throttle limits.
 4. Evaluation across many sites and scenarios rather than one.

@@ -245,6 +245,42 @@ class ApiTests(unittest.TestCase):
         self.assertIsNotNone(_sky.cache_info().maxsize)
         self.assertIsNotNone(_goal_area.cache_info().maxsize)
 
+    def test_catalog_lists_sourced_sites_and_the_covered_dates(self):
+        c = self.client.get('/api/catalog').json()
+        self.assertEqual(c['dates'], {'first': '2026-01-01T00:00:00Z', 'last': '2031-01-01T00:00:00Z'})
+        names = {s['name'] for s in c['sites']}
+        self.assertTrue({'Apollo 11', 'Connecting ridge', 'Chandrayaan-3 (Vikram)'} <= names)
+        for s in c['sites']:
+            self.assertTrue(s['source'].startswith('https://'), s['name'])
+            self.assertTrue(-90 <= s['lat'] <= 90 and -180 <= s['lon'] <= 180, s['name'])
+
+    def test_conditions_give_series_skyline_and_windows(self):
+        r = self.client.post('/api/conditions', json={'lat': -89.44, 'lon': -137.1, 'start': '2026-11-14T09:00:00+08:00',
+                                                      'days': 3, 'step_h': 1}).json()
+        self.assertEqual(r['times'][0], '2026-11-14T01:00:00Z')        # the +08:00 start is read as 01:00 UTC
+        self.assertEqual(len(r['times']), 73)
+        for key in ('azimuth', 'elevation', 'visible'):
+            self.assertEqual(len(r['sun'][key]), 73)
+            self.assertEqual(len(r['earth'][key]), 73)
+        self.assertEqual(len(r['horizon']), 360)
+        self.assertIn('sunlit_pct', r['summary'])
+        self.assertIsInstance(r['sunlight_windows'], list)
+
+    def test_compare_returns_one_summary_per_site(self):
+        r = self.client.post('/api/compare', json={'sites': [{'lat': .674, 'lon': 23.473}, {'lat': -45.4561, 'lon': 177.5885}],
+                                                   'start': '2027-01-01T00:00:00Z', 'days': 30}).json()
+        self.assertEqual(len(r['sites']), 2)
+        self.assertEqual(r['sites'][0]['summary']['earth_visible_pct'], 100.)
+        self.assertEqual(r['sites'][1]['summary']['earth_visible_pct'], 0.)
+
+    def test_conditions_reject_bad_requests(self):
+        base = {'lat': 0., 'lon': 0., 'start': '2027-01-01T00:00:00Z'}
+        for bad in ({'lat': 95.}, {'days': 61}, {'days': 0}, {'step_h': .1}, {'start': '2024-01-01T00:00:00Z'},
+                    {'start': 'tomorrow'}, {'lon': 400.}):
+            self.assertEqual(self.client.post('/api/conditions', json={**base, **bad}).status_code, 422, bad)
+        too_many = {'sites': [{'lat': 0., 'lon': 0.}]*7, 'start': '2027-01-01T00:00:00Z'}
+        self.assertEqual(self.client.post('/api/compare', json=too_many).status_code, 422)
+
     def test_rover_reports_when_it_runs_out_of_battery(self):
         r = self.client.post('/api/rover', json={'start': [700, 500], 'goal': [900, 900], 'sun_el': -5,
                                                  'start_battery_pct': 1}).json()

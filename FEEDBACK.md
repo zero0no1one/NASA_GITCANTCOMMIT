@@ -2,7 +2,7 @@
 
 The first review of the project's docs found that the Plan and Paper describe a system that was never built. This file tracks what has been fixed and what's still open.
 
-Echo-Path is now a separate practice project, not the team's Space Apps 2026 entry, so nothing below blocks a submission. These items only matter if the team keeps developing or publishes Echo-Path.
+Echo-Path is now the base of the team's Space Apps 2026 entry for Lunar Landing Site Navigator, which an event organiser allowed. The paper below predates that and isn't part of the submission unless the team decides to include it.
 
 ## Still open
 

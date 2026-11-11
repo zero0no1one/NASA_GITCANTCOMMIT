@@ -103,10 +103,11 @@ export function SettingsPanel({ mission }: { mission: Mission }) {
   return (
     <details className="fold settings">
       <summary>Sky, rover and map settings</summary>
-      <Slider label="Earth elevation" value={earthEl} min={sky.earth_el_min} max={sky.earth_el_max} step={0.1} unit="°" onChange={(v) => set({ earthEl: v })} />
+      {s.skyDate && <p className="note">Sun and Earth as at {s.skyDate.slice(0, 10)} {s.skyDate.slice(11, 16)} UTC, from NASA JPL Horizons. Moving a slider changes the sky by hand.</p>}
+      <Slider label="Earth elevation" value={earthEl} min={sky.earth_el_min} max={sky.earth_el_max} step={0.1} unit="°" onChange={(v) => set({ earthEl: v, skyDate: null })} />
       {earthEl <= 0 && <p className="note warn">Earth is below the horizon, so there is no direct link.</p>}
-      <Slider label="Sun direction" value={s.sunAz ?? sky.sun_az} min={0} max={359} step={1} unit="°" onChange={(v) => set({ sunAz: v })} />
-      <Slider label="Sun elevation" value={sunEl} min={sky.sun_el_min} max={sky.sun_el_max} step={0.1} unit="°" onChange={(v) => set({ sunEl: v })} />
+      <Slider label="Sun direction" value={s.sunAz ?? sky.sun_az} min={0} max={359} step={1} unit="°" onChange={(v) => set({ sunAz: v, skyDate: null })} />
+      <Slider label="Sun elevation" value={sunEl} min={sky.sun_el_min} max={sky.sun_el_max} step={0.1} unit="°" onChange={(v) => set({ sunEl: v, skyDate: null })} />
       {sunEl <= 0 && <p className="note warn">The Sun is below the horizon, so the rover runs on battery alone.</p>}
       <p className="note">
         {sky.horizon_km > 0
