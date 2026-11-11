@@ -134,6 +134,7 @@ export interface LandingSite {
   lon: number | null
   earth_visible: boolean
   sunlit: boolean
+  rover_can_reach_goal: boolean
   score: number
 }
 

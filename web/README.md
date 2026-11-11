@@ -40,6 +40,7 @@ Open http://localhost:5173. The dev server forwards `/api/...` to port 8000, so 
 - **Camera:** *Overview*, *Horizon* (a view from the ground with Earth in the sky) and *Follow vehicle*.
 - **Realism:** real LOLA elevations at 5 m per pixel, shadows from the Sun's real direction, NASA's surrounding terrain out to the horizon, and the Earth and Sun at their true positions and sizes. Earth's phase comes from the real lighting. The vehicles are drawn 7× life size so they can be seen on a kilometre-wide map, and height is exaggerated 1.5× by default (adjustable).
 - **Terrains:** the Leibnitz Beta plateau (default), a site near the pole where Earth is low or hidden, and a synthetic test map where only the map itself can block the Earth or Sun, which the app points out.
+- **New random surface:** generates a fresh made-up stretch of Moon, with craters, boulders and sometimes a ridge. The app ranks where to land on it, and the plan screen shows the rover's best route from touchdown to its goal (blue marker) before you fly. Sites the rover couldn't drive away from are marked and ranked last. Each surface has a number, and the same number always gives the same surface.
 
 ## Code map
 

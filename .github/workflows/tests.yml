@@ -73,3 +73,4 @@ jobs:
           curl -fs -X POST -H 'Content-Type: application/json' -d '{"terrain":"lola_site20"}' http://localhost:8000/api/sites | grep -q '"earth_visible"'
           curl -fs -X POST -H 'Content-Type: application/json' -d '{"terrain":"lola_site20"}' http://localhost:8000/api/mission > /dev/null
           curl -fs -X POST -H 'Content-Type: application/json' -d '{"terrain":"lola_site20","start":[900,600],"goal":[180,1020]}' http://localhost:8000/api/rover | grep -q '"reached_goal":true'
+          curl -fs -X POST -H 'Content-Type: application/json' -d '{"terrain":"random-21"}' http://localhost:8000/api/sites | grep -q '"rover_can_reach_goal":true'

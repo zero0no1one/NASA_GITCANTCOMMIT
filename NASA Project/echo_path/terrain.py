@@ -62,6 +62,99 @@ def synthetic(seed=42, size=101, spacing=10.):
     return Terrain(z, spacing, spacing, 'Synthetic ridge and landing basin', {'seed': seed})
 
 
+def random_moon(seed, size=121, spacing=10.):
+    """A made-up patch of lunar surface, the same every time for the same seed.
+
+    Rolling ground whose relief fades with smaller scales, craters with raised rims in the size mix seen on old
+    lunar surfaces (many small, few large; fresh ones deep, old ones worn shallow), boulders around fresh craters,
+    and sometimes a ridge. Also picks a rover goal: firm ground just outside the rim of the largest crater.
+    """
+    rng = np.random.default_rng(seed)
+    span = (size-1)*spacing
+    y, x = np.mgrid[:size, :size]*spacing
+
+    # Rolling ground: random relief with power falling off steeply with frequency.
+    f = np.hypot(np.fft.fftfreq(size, spacing)[None, :], np.fft.fftfreq(size, spacing)[:, None])
+    f[0, 0] = np.inf
+    amplitude = f**(-rng.uniform(1.7, 2.0))
+    ground = np.real(np.fft.ifft2(amplitude*(rng.normal(size=f.shape)+1j*rng.normal(size=f.shape))))
+    z = ground/ground.std()*rng.uniform(4., 10.)
+    tilt = np.radians(rng.uniform(0., 1.5))
+    heading = rng.uniform(0., 2*np.pi)
+    z += np.tan(tilt)*(x*np.cos(heading)+y*np.sin(heading))
+
+    # Sometimes a ridge crosses the map: it hides the horizon and makes the rover go round.
+    if rng.random() < .6:
+        angle = rng.uniform(0., np.pi)
+        cx, cy = rng.uniform(.25, .75, 2)*span
+        across = (x-cx)*np.sin(angle)-(y-cy)*np.cos(angle)
+        along = (x-cx)*np.cos(angle)+(y-cy)*np.sin(angle)
+        width = rng.uniform(60., 130.)
+        swell = 1+.35*np.sin(along/rng.uniform(120., 260.)+rng.uniform(0., 2*np.pi))
+        z += rng.uniform(25., 60.)*swell*np.exp(-(across/width)**2)
+
+    # Craters: sizes from a power law with exponent -2 (cumulative), oldest first so younger ones cut into them.
+    d_min, d_max = 20., rng.uniform(250., 450.)
+    u = rng.random(rng.integers(50, 110))
+    diameters = d_min*(1-u*(1-(d_min/d_max)**2))**-.5
+    craters = []
+    for d, fresh in sorted(zip(diameters, rng.random(len(diameters))), key=lambda c: c[1]):
+        cx, cy = rng.uniform(-.1, 1.1, 2)*span
+        radius = d/2
+        depth = d*(.04+.16*fresh)
+        rim = d*(.008+.032*fresh)
+        s = np.hypot(x-cx, y-cy)/radius
+        z += np.where(s < 1, -depth+(depth+rim)*s**2, rim*np.maximum(s, 1)**-3)
+        craters.append((cx, cy, radius, fresh))
+
+    # Boulders: thrown out around fresh craters, plus a scattering everywhere.
+    spots = [(rng.uniform(0., span), rng.uniform(0., span), rng.uniform(.4, 1.8)) for _ in range(rng.integers(20, 60))]
+    for cx, cy, radius, fresh in craters:
+        if fresh > .6 and radius > 30:
+            for _ in range(int(fresh*radius/6)):
+                a, r = rng.uniform(0., 2*np.pi), radius*rng.uniform(.9, 2.)
+                spots.append((cx+r*np.cos(a), cy+r*np.sin(a), rng.uniform(1., 3.5)))
+    for bx, by, height in spots:
+        z += height*np.exp(-((x-bx)**2+(y-by)**2)/(2*rng.uniform(3., 6.)**2))
+
+    terrain = Terrain(z-z.min(), spacing, spacing, f'Random lunar surface, seed {seed}', {'seed': seed})
+    terrain.metadata['goal_xy'] = _crater_goal(terrain, craters)
+    return terrain
+
+
+def _crater_goal(terrain, craters):
+    """Firm ground just outside the largest crater rim well inside the map, else the far corner.
+
+    Either way the goal is on the largest stretch of connected drivable ground, with margin below the rover's
+    default limits (20° slope, 1 m roughness over 10 m), so a route from a landing site normally exists.
+    """
+    from scipy.ndimage import label
+    h = hazards(terrain, 20., 1., 10.)
+    drivable = np.isfinite(h['roughness']) & (h['slope'] < 14.) & (h['roughness'] < .6)
+    parts, count = label(drivable)   # edge-connected, like the rover's route search
+    if count == 0:
+        return [.85*terrain.width, .85*terrain.height]
+    largest = parts == np.argmax(np.bincount(parts.ravel())[1:])+1
+    firm = binary_erosion(largest, structure=np.ones((3, 3)))
+    rows, cols = terrain.z.shape
+    span = terrain.width
+
+    def cell(px, py):
+        return int(round(py/terrain.dy)), int(round(px/terrain.dx))
+
+    for cx, cy, radius, _ in sorted(craters, key=lambda c: -c[2]):
+        if not (.25*span < cx < .85*span and .25*span < cy < .85*span) or radius < 40:
+            continue
+        for a in np.linspace(0, 2*np.pi, 24, endpoint=False):
+            px, py = cx+1.5*radius*np.cos(a), cy+1.5*radius*np.sin(a)
+            if .08*span < px < .92*span and .08*span < py < .92*span and firm[cell(px, py)]:
+                return [round(float(px), 1), round(float(py), 1)]
+    # No crater to visit: the firm ground nearest the far corner.
+    choices = np.argwhere(firm if firm.any() else largest)
+    row, col = choices[np.argmin(np.hypot(choices[:, 0]-.85*(rows-1), choices[:, 1]-.85*(cols-1)))]
+    return [float(col*terrain.dx), float(row*terrain.dy)]
+
+
 def load_dem(source, row=0, col=0, size=160, vertical_factor=1.):
     """Read native-resolution crop; reject ambiguous or nonmetric horizontal coordinates."""
     import rasterio

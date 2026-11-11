@@ -207,6 +207,44 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(r.status_code, 200, missing)
             self.assertIsNone(r.json()['sun'])
 
+    def test_random_surfaces_are_served_by_seed(self):
+        a = self.client.get('/api/terrain/random-4242').json()
+        self.assertEqual(a['id'], 'random-4242')
+        self.assertEqual(len(a['z']), a['rows']*a['cols'])
+        self.assertIsNone(a['origin_xy'])
+        self.assertEqual(a['sky']['horizon_km'], 0.)
+        self.assertEqual(self.client.get('/api/terrain/random-4242').json()['z'], a['z'])
+        self.assertNotEqual(self.client.get('/api/terrain/random-4243').json()['z'], a['z'])
+        self.assertEqual(self.client.get('/api/terrain/random-4242/horizon').json()['rows'], 0)
+        for bad in ('random-', 'random-abc', 'random-1234567', 'random--5', 'random-1.5'):
+            self.assertEqual(self.client.get(f'/api/terrain/{bad}').status_code, 404, bad)
+
+    def test_random_surface_plans_landing_then_rover_route(self):
+        tid = 'random-21'
+        sites = self.client.post('/api/sites', json={'terrain': tid}).json()['sites']
+        self.assertGreaterEqual(len(sites), 3)
+        self.assertTrue(sites[0]['rover_can_reach_goal'])
+        m = self.client.post('/api/mission', json={'terrain': tid, 'target_xy': [sites[0]['x_m'], sites[0]['y_m']]}).json()
+        self.assertTrue(m['nominal']['feasible'], m['nominal']['reasons'])
+        goal = self.client.get(f'/api/terrain/{tid}').json()['sky']['goal_xy']
+        r = self.client.post('/api/rover', json={'terrain': tid, 'start': m['nominal']['touchdown'][:2], 'goal': goal}).json()
+        self.assertTrue(r['reached_goal'], r.get('reason'))
+        self.assertGreater(r['summary']['distance_m'], 100.)
+
+    def test_sites_the_rover_cannot_leave_rank_last(self):
+        # On the built-in test map a ridge cuts the landing ground off from the rover goal.
+        sites = self.client.post('/api/sites', json={'terrain': 'synthetic'}).json()['sites']
+        self.assertTrue(all(not s['rover_can_reach_goal'] for s in sites))
+        ranked = self.client.post('/api/sites', json={'terrain': 'random-21'}).json()['sites']
+        flags = [s['rover_can_reach_goal'] for s in ranked]
+        self.assertEqual(flags, sorted(flags, reverse=True))   # every reachable site comes before any stranded one
+
+    def test_random_surface_cache_is_bounded(self):
+        from api.main import _random_surface, _sky, _goal_area
+        self.assertEqual(_random_surface.cache_info().maxsize, 16)
+        self.assertIsNotNone(_sky.cache_info().maxsize)
+        self.assertIsNotNone(_goal_area.cache_info().maxsize)
+
     def test_rover_reports_when_it_runs_out_of_battery(self):
         r = self.client.post('/api/rover', json={'start': [700, 500], 'goal': [900, 900], 'sun_el': -5,
                                                  'start_battery_pct': 1}).json()

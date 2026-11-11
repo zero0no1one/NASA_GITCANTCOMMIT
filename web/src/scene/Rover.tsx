@@ -52,6 +52,20 @@ interface Props {
   exaggeration: number
 }
 
+/** The planned drive, coloured by the Earth link along it. */
+export function RoverRoute({ grid, timeline, exaggeration, opacity = 1 }: Props & { opacity?: number }) {
+  const route = useMemo(() => {
+    const points = timeline.x.map((x, i) => {
+      const [sx, sy, sz] = toScene(grid, exaggeration, x, timeline.y[i], timeline.z[i])
+      return new THREE.Vector3(sx, sy + 1.5, sz)
+    })
+    const colors = timeline.comms.map((c) => (c === 1 ? LINK.clear : c === 0 ? LINK.blocked : LINK.unknown))
+    return { points, colors }
+  }, [grid, timeline, exaggeration])
+  if (route.points.length < 2) return null
+  return <Line points={route.points} vertexColors={route.colors} lineWidth={3} transparent={opacity < 1} opacity={opacity} />
+}
+
 export function Rover({ grid, timeline, exaggeration }: Props) {
   const body = useRef<THREE.Group>(null)
   const target = useMemo(() => new THREE.Quaternion(), [])
@@ -73,15 +87,6 @@ export function Rover({ grid, timeline, exaggeration }: Props) {
       return [...driven, point(last.x, last.y, last.z)]
     })
   }, [grid, history, exaggeration])
-
-  const route = useMemo(() => {
-    const points = timeline.x.map((x, i) => {
-      const [sx, sy, sz] = toScene(grid, exaggeration, x, timeline.y[i], timeline.z[i])
-      return new THREE.Vector3(sx, sy + 1.5, sz)
-    })
-    const colors = timeline.comms.map((c) => (c === 1 ? LINK.clear : c === 0 ? LINK.blocked : LINK.unknown))
-    return { points, colors }
-  }, [grid, timeline, exaggeration])
 
   const forward = useMemo(() => new THREE.Vector3(), [])
   const normal = useMemo(() => new THREE.Vector3(), [])
@@ -124,7 +129,7 @@ export function Rover({ grid, timeline, exaggeration }: Props) {
 
   return (
     <group>
-      {route.points.length > 1 && <Line points={route.points} vertexColors={route.colors} lineWidth={3} />}
+      <RoverRoute grid={grid} timeline={timeline} exaggeration={exaggeration} />
       {trailPoints.length > 1 && <Line points={trailPoints} color="#e3b341" lineWidth={2} dashed dashSize={6} gapSize={4} />}
       <group ref={body}>
         <RoverModel />
